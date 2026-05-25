@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * @title StreamingPayroll
+ * @dev Autonomous payroll streaming contract on Arc Chain.
+ * Fees are paid in USDC, and finality is sub-second.
+ */
+interface IERC20 {
+    function transfer(address to, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
+}
+
+contract StreamingPayroll {
+    struct Stream {
+        address employer;
+        address employee;
+        uint256 flowRate; // USDC (6 decimals) per second
+        uint256 startTime;
+        uint256 lastUpdated;
+        uint256 accruedPaid;
+        uint256 totalCap; // Maximum amount for this milestone
+        bool isActive;
+    }
+
+    // USDC Address on Arc Chain: 0x3600000000000000000000000000000000000000
+    address public immutable usdcToken;
+    address public owner;
+
+    mapping(bytes32 => Stream) public streams;
+    mapping(address => bytes32[]) public employeeStreams;
+    mapping(address => bytes32[]) public employerStreams;
+
+    event StreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, uint256 flowRate, uint256 totalCap);
+    event StreamUpdated(bytes32 indexed streamId, uint256 newFlowRate);
+    event StreamCancelled(bytes32 indexed streamId, uint256 remainingRefunded);
+    event FundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+
+    modifier onlyStreamEmployer(bytes32 streamId) {
+        require(streams[streamId].employer == msg.sender, "Only stream employer");
+        _;
+    }
+
+    modifier onlyStreamEmployee(bytes32 streamId) {
+        require(streams[streamId].employee == msg.sender, "Only stream employee");
+        _;
+    }
+
+    constructor(address _usdcToken) {
+        usdcToken = _usdcToken;
+        owner = msg.sender;
+    }
+
+    /**
+     * @notice Create a streaming payroll for a remote engineer.
+     * @param employee Remote worker address.
+     * @param flowRate Amount of USDC (6 decimals) per second.
+     * @param totalCap Total amount escrowed for this milestone.
+     */
+    function createStream(
+        address employee,
+        uint256 flowRate,
+        uint256 totalCap
+    ) external returns (bytes32) {
+        require(employee != address(0), "Invalid employee address");
+        require(flowRate > 0, "Flow rate must be positive");
+        require(totalCap > 0, "Total cap must be positive");
+
+        // Lock total cap from employer into contract
+        require(
+            IERC20(usdcToken).transferFrom(msg.sender, address(this), totalCap),
+            "USDC deposit failed"
+        );
+
+        bytes32 streamId = keccak256(
+            abi.encodePacked(msg.sender, employee, block.timestamp)
+        );
+
+        streams[streamId] = Stream({
+            employer: msg.sender,
+            employee: employee,
+            flowRate: flowRate,
+            startTime: block.timestamp,
+            lastUpdated: block.timestamp,
+            accruedPaid: 0,
+            totalCap: totalCap,
+            isActive: true
+        });
+
+        employeeStreams[employee].push(streamId);
+        employerStreams[msg.sender].push(streamId);
+
+        emit StreamCreated(streamId, msg.sender, employee, flowRate, totalCap);
+        return streamId;
+    }
+
+    /**
+     * @notice View the claimable balance of a stream at the current block timestamp.
+     */
+    function getClaimableAmount(bytes32 streamId) public view returns (uint256) {
+        Stream memory stream = streams[streamId];
+        if (!stream.isActive) return 0;
+
+        uint256 duration = block.timestamp - stream.lastUpdated;
+        uint256 accrued = duration * stream.flowRate;
+
+        // Ensure we don't exceed the capped amount
+        uint256 remaining = stream.totalCap - stream.accruedPaid;
+        if (accrued > remaining) {
+            return remaining;
+        }
+        return accrued;
+    }
+
+    /**
+     * @notice Withdraw available USDC stream funds.
+     */
+    function withdrawFunds(bytes32 streamId) public onlyStreamEmployee(streamId) {
+        Stream storage stream = streams[streamId];
+        require(stream.isActive, "Stream is not active");
+
+        uint256 claimable = getClaimableAmount(streamId);
+        require(claimable > 0, "No funds available to withdraw");
+
+        stream.accruedPaid += claimable;
+        stream.lastUpdated = block.timestamp;
+
+        // If payroll fully completed, mark inactive
+        if (stream.accruedPaid >= stream.totalCap) {
+            stream.isActive = false;
+        }
+
+        require(
+            IERC20(usdcToken).transfer(stream.employee, claimable),
+            "USDC transfer failed"
+        );
+
+        emit FundsWithdrawn(streamId, stream.employee, claimable);
+    }
+
+    /**
+     * @notice Cancel stream by employer, refunding the remaining unspent escrow.
+     */
+    function cancelStream(bytes32 streamId) external onlyStreamEmployer(streamId) {
+        Stream storage stream = streams[streamId];
+        require(stream.isActive, "Stream already inactive");
+
+        // Calculate accrued up to now
+        uint256 claimable = getClaimableAmount(streamId);
+        uint256 spent = stream.accruedPaid + claimable;
+        uint256 unspent = stream.totalCap - spent;
+
+        stream.accruedPaid = spent;
+        stream.isActive = false;
+
+        // Send accrued to employee
+        if (claimable > 0) {
+            require(
+                IERC20(usdcToken).transfer(stream.employee, claimable),
+                "USDC transfer to employee failed"
+            );
+            emit FundsWithdrawn(streamId, stream.employee, claimable);
+        }
+
+        // Refund remaining unspent to employer
+        if (unspent > 0) {
+            require(
+                IERC20(usdcToken).transfer(stream.employer, unspent),
+                "USDC refund to employer failed"
+            );
+        }
+
+        emit StreamCancelled(streamId, unspent);
+    }
+}
