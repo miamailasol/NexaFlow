@@ -1063,7 +1063,7 @@ function App() {
             <div className="onboarding-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Zap size={18} color="var(--color-secondary)" fill="var(--color-secondary)" />
-                <strong style={{ fontSize: '15px', color: '#fff' }}>Quickstart Guide: Interactive Onboarding</strong>
+                <strong style={{ fontSize: '15px', color: '#1A1A1A' }}>Quickstart Guide: Interactive Onboarding</strong>
               </div>
               <button className="onboarding-toggle-btn" onClick={() => setShowOnboarding(false)}>
                 Dismiss Guide

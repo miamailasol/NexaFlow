@@ -1355,6 +1355,31 @@ select.form-input {
   padding-bottom: 12px;
 }
 
+.onboarding-toggle-btn {
+  background-color: #FFFFFF;
+  color: #1A1A1A;
+  border: 2px solid #1A1A1A;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px #1A1A1A;
+  transition: all 0.1s ease;
+  font-family: inherit;
+}
+
+.onboarding-toggle-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #1A1A1A;
+  background-color: #FFF3F3;
+}
+
+.onboarding-toggle-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #1A1A1A;
+}
+
 .onboarding-steps-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
