@@ -40,7 +40,7 @@ sequenceDiagram
     
     alt Personal HSA Balance >= Claim Amount
         Note over MB: Deduct entirely from Employee HSA Balance
-    alt Personal HSA Balance < Claim Amount
+    else Personal HSA Balance < Claim Amount
         Note over MB: Deduct available HSA, deficit covered by Co-op Safety Pool
     end
     
