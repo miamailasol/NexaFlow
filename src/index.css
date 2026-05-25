@@ -700,6 +700,14 @@ body {
 
 select.form-input {
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 38px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231A1A1A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
 }
 
 /* Custom UI Elements */
@@ -1652,3 +1660,295 @@ select.form-input {
 .animate-spin {
   animation: spin 1.2s linear infinite;
 }
+
+/* ==========================================
+   NEXAFLOW RESPONSIVE UTILITIES & DRAWERS
+   ========================================== */
+
+/* Responsive Grid & Card Styling */
+.dashboard-panels-grid {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr;
+  gap: 28px;
+  margin-bottom: 28px;
+}
+
+.stream-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-name { grid-column: span 1; }
+.form-role { grid-column: span 1; }
+.form-currency { grid-column: span 1; }
+.form-limit { grid-column: span 1; }
+.form-address { grid-column: span 2; }
+.form-velocity { grid-column: span 2; }
+.form-actions-wrapper { grid-column: span 2; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+
+.stream-card-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stream-card-info {
+  width: 22%;
+}
+
+.stream-card-address {
+  width: 28%;
+}
+
+/* Make both wrappers fully premium & responsive */
+.stream-counter-wrapper,
+.stream-card-counter-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  background: #F4F4F9 !important;
+  border: var(--thin-border) !important;
+  padding: 8px 14px !important;
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+}
+
+.stream-counter-wrapper {
+  width: 30% !important;
+}
+
+.stream-card-counter-wrapper {
+  width: 25% !important;
+}
+
+.stream-counter-value {
+  font-family: var(--font-mono) !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  color: var(--text-main) !important;
+  word-break: keep-all !important;
+  white-space: nowrap !important;
+}
+
+.stream-card-progress {
+  width: 15%;
+}
+
+.stream-card-actions {
+  width: 12%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.stream-card-status {
+  width: 12%;
+  display: flex;
+  align-items: center;
+}
+
+/* Mobile Navbar Styles */
+.mobile-navbar {
+  display: none;
+  background-color: var(--bg-sidebar);
+  border-bottom: var(--thick-border);
+  padding: 12px 20px;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  width: 100%;
+}
+
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-brand .brand-name {
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.5px;
+}
+
+.menu-toggle-btn {
+  background-color: var(--color-success);
+  border: var(--medium-border);
+  box-shadow: 2px 2px 0px #1A1A1A;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.menu-toggle-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #1A1A1A;
+}
+
+.menu-toggle-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #1A1A1A;
+}
+
+/* Sidebar Backdrop Overlay */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(26, 26, 26, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+}
+
+.sidebar-overlay.active {
+  display: block;
+}
+
+/* General Media Queries */
+@media (max-width: 1024px) {
+  .mobile-navbar {
+    display: flex;
+  }
+
+  .mobile-close-btn {
+    display: flex !important;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -320px; /* Hidden offscreen */
+    width: 290px;
+    height: 100vh;
+    z-index: 1000;
+    transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 8px 0px 0px #1A1A1A;
+    border-right: var(--thick-border);
+  }
+
+  .sidebar.mobile-open {
+    left: 0; /* Slide in */
+  }
+
+  body {
+    height: auto !important;
+    overflow: auto !important;
+  }
+
+  #root {
+    flex-direction: column;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .app-container {
+    flex-direction: column;
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+  }
+
+  .main-content {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 24px 16px !important;
+  }
+
+  /* Employee Streams Card Vertical Stack on Mobile */
+  .stream-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .stream-card-section {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  .stream-counter-wrapper,
+  .stream-card-counter-wrapper {
+    width: 100% !important;
+    display: flex !important;
+    padding: 12px 16px !important;
+    margin: 8px 0 !important;
+  }
+
+  .stream-card-actions {
+    margin-top: 4px;
+  }
+
+  .stream-card-actions .btn {
+    width: 100%;
+    height: 48px; /* High accessibility mobile tap target */
+  }
+
+  .dashboard-panels-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sticker {
+    display: none !important;
+  }
+}
+
+@media (max-width: 850px) {
+  .stream-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .form-name, .form-role, .form-currency, .form-limit, .form-address, .form-velocity, .form-actions-wrapper {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .header-title-wrapper h1 {
+    font-size: 24px !important;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    width: 100%;
+  }
+}
+
+/* Toast responsiveness */
+@media (max-width: 480px) {
+  .payout-toast {
+    width: calc(100% - 32px) !important;
+    left: 16px !important;
+    right: 16px !important;
+    bottom: 16px !important;
+  }
+}
+
+/* Ensure data tables do not squish under viewport width */
+.data-table {
+  width: 100%;
+  min-width: 850px; /* Triggers table container horizontal overflow */
+  border-collapse: collapse;
+}
+

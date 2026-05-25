@@ -21,7 +21,8 @@ import {
   X,
   RefreshCw,
   ExternalLink,
-  Code
+  Code,
+  Menu
 } from 'lucide-react'
 import './App.css'
 
@@ -97,6 +98,7 @@ contract MicroBenefitsVault {
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showOnboarding, setShowOnboarding] = useState(true)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   // Wagmi Account details
   const { address, isConnected } = useAccount()
@@ -869,18 +871,62 @@ function App() {
         <div className="payout-toast-body">{toastBody}</div>
       </div>
 
+      {/* Mobile Top Navbar Header (Visible only on mobile/tablet <= 1024px) */}
+      <div className="mobile-navbar">
+        <div className="mobile-brand">
+          <div style={{ 
+            width: '32px', 
+            height: '32px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            backgroundColor: 'var(--color-success)', 
+            border: 'var(--thin-border)', 
+            borderRadius: '6px' 
+          }}>
+            <Zap size={16} color="var(--text-main)" fill="var(--text-main)" />
+          </div>
+          <span className="brand-name">NexaFlow</span>
+          <span className="brand-badge" style={{ fontSize: '8px', padding: '1px 4px' }}>LIVE</span>
+        </div>
+        <button className="menu-toggle-btn" onClick={() => setIsMobileSidebarOpen(true)}>
+          <Menu size={18} color="var(--text-main)" />
+        </button>
+      </div>
+
+      {/* Sidebar Overlay Backdrop for Mobile Drawer */}
+      <div className={`sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`} onClick={() => setIsMobileSidebarOpen(false)}></div>
+
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
         <div>
-          <div className="brand-section">
-            <div className="brand-logo">
-              <Zap size={20} color="var(--text-main)" fill="var(--text-main)" />
+          <div className="brand-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="brand-logo">
+                <Zap size={20} color="var(--text-main)" fill="var(--text-main)" />
+              </div>
+              <div>
+                <span className="brand-name">NexaFlow</span>
+                <div style={{ fontSize: '8px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.5px' }}>GLOBAL CONTINUOUS PAYMENTS</div>
+              </div>
             </div>
-            <div>
-              <span className="brand-name">NexaFlow</span>
-              <div style={{ fontSize: '8px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.5px' }}>GLOBAL CONTINUOUS PAYMENTS</div>
-            </div>
-            <span className="brand-badge">LIVE</span>
+            <button 
+              className="mobile-close-btn"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              style={{
+                background: 'var(--color-error)',
+                border: 'var(--thin-border)',
+                borderRadius: '6px',
+                padding: '4px',
+                cursor: 'pointer',
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '1.5px 1.5px 0px #1A1A1A'
+              }}
+            >
+              <X size={14} color="var(--text-main)" />
+            </button>
           </div>
 
           {/* Connect Button */}
@@ -892,7 +938,7 @@ function App() {
             <li className="nav-item">
               <a
                 className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
               >
                 <Activity size={18} />
                 Overview Dashboard
@@ -901,7 +947,7 @@ function App() {
             <li className="nav-item">
               <a
                 className={`nav-link ${activeTab === 'streaming' ? 'active' : ''}`}
-                onClick={() => setActiveTab('streaming')}
+                onClick={() => { setActiveTab('streaming'); setIsMobileSidebarOpen(false); }}
               >
                 <DollarSign size={18} />
                 Continuous Salary Flows
@@ -910,7 +956,7 @@ function App() {
             <li className="nav-item">
               <a
                 className={`nav-link ${activeTab === 'compliance' ? 'active' : ''}`}
-                onClick={() => setActiveTab('compliance')}
+                onClick={() => { setActiveTab('compliance'); setIsMobileSidebarOpen(false); }}
               >
                 <ShieldCheck size={18} />
                 Security & Safety Scanner
@@ -919,7 +965,7 @@ function App() {
             <li className="nav-item">
               <a
                 className={`nav-link ${activeTab === 'benefits' ? 'active' : ''}`}
-                onClick={() => setActiveTab('benefits')}
+                onClick={() => { setActiveTab('benefits'); setIsMobileSidebarOpen(false); }}
               >
                 <HeartHandshake size={18} />
                 My Benefits & Savings
@@ -928,7 +974,7 @@ function App() {
             <li className="nav-item">
               <a
                 className={`nav-link ${activeTab === 'contracts' ? 'active' : ''}`}
-                onClick={() => setActiveTab('contracts')}
+                onClick={() => { setActiveTab('contracts'); setIsMobileSidebarOpen(false); }}
               >
                 <Code size={18} />
                 How It Works
@@ -1187,7 +1233,7 @@ function App() {
             </div>
 
             {/* Dashboard Visual Panels */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '28px', marginBottom: '28px' }}>
+            <div className="dashboard-panels-grid">
               
               {/* Active Streams Panel */}
               <div className="panel-card" style={{ marginBottom: 0 }}>
@@ -1198,14 +1244,16 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {employees.slice(0, 3).map((emp) => (
                     <div key={emp.id} className="stream-card">
-                      <div className="stream-info">
-                        <div className="avatar">{emp.avatar}</div>
-                        <div className="engineer-details">
-                          <h4>{emp.name}</h4>
-                          <p>{emp.role}</p>
+                      <div className="stream-card-section stream-card-info">
+                        <div className="stream-info">
+                          <div className="avatar">{emp.avatar}</div>
+                          <div className="engineer-details">
+                            <h4>{emp.name}</h4>
+                            <p>{emp.role}</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="stream-counter-wrapper">
+                      <div className="stream-card-section stream-card-counter-wrapper">
                         <span className="stream-counter-label">Accrued Salary (Live)</span>
                         <div className="stream-counter-value" style={{ color: emp.isActive ? 'var(--color-secondary)' : 'var(--text-muted)' }}>
                           {emp.accruedLive.toFixed(5)} USDC
@@ -1214,7 +1262,7 @@ function App() {
                           Velocity: {emp.flowRate.toFixed(4)} USDC/s (~${(emp.flowRate * 3600).toFixed(2)}/hr)
                         </span>
                       </div>
-                      <div className="stream-progress-bar-container">
+                      <div className="stream-card-section stream-card-progress">
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                           <span>{(emp.accruedLive / emp.totalCap * 100).toFixed(1)}%</span>
                           <span>Limit: {emp.totalCap} USDC</span>
@@ -1226,7 +1274,7 @@ function App() {
                           ></div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div className="stream-card-section stream-card-status">
                         <span className={`badge ${emp.complianceStatus === 'Verified' ? 'badge-success' : 'badge-danger'}`}>
                           {emp.complianceStatus === 'Verified' ? 'Security Cleared' : 'Flagged'}
                         </span>
@@ -1341,8 +1389,8 @@ function App() {
                 Create New Continuous Pay Flow
               </div>
               
-              <form onSubmit={handleCreateStream} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-                <div className="form-group">
+              <form onSubmit={handleCreateStream} className="stream-form-grid">
+                <div className="form-group form-name">
                   <label className="form-label">Team Member Name</label>
                   <input
                     type="text"
@@ -1355,7 +1403,7 @@ function App() {
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Name of the wage recipient.</div>
                 </div>
 
-                <div className="form-group">
+                <div className="form-group form-role">
                   <label className="form-label">Role Title</label>
                   <input
                     type="text"
@@ -1367,7 +1415,7 @@ function App() {
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Designation or department.</div>
                 </div>
 
-                <div className="form-group">
+                <div className="form-group form-currency">
                   <label className="form-label">Local Currency / Country</label>
                   <select
                     className="form-input"
@@ -1382,7 +1430,21 @@ function App() {
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Jurisdiction for automated tax reserve routing.</div>
                 </div>
 
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <div className="form-group form-limit">
+                  <label className="form-label">Maximum Payment Limit (USDC)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newEmployeeCap}
+                    onChange={(e) => setNewEmployeeCap(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    The total amount of funds locked in the continuous pay flow safe.
+                  </div>
+                </div>
+
+                <div className="form-group form-address">
                   <label className="form-label">Recipient Payment Wallet / Address</label>
                   <input
                     type="text"
@@ -1397,21 +1459,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Maximum Payment Limit (USDC)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newEmployeeCap}
-                    onChange={(e) => setNewEmployeeCap(e.target.value)}
-                    required
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    The total amount of funds locked in the continuous pay flow safe.
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <div className="form-group form-velocity">
                   <label className="form-label">Flow Velocity: {newEmployeeRate} USDC/sec (~${(newEmployeeRate * 3600).toFixed(2)}/hour)</label>
                   <input
                     type="range"
@@ -1427,7 +1475,7 @@ function App() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+                <div className="form-actions-wrapper">
                   {/* Action Preview */}
                   <div className="action-preview-card">
                     <div className="action-preview-title">
@@ -1462,7 +1510,7 @@ function App() {
                     borderColor: glowTargetId === `stream-card-${emp.id}` ? 'var(--color-success)' : '',
                     boxShadow: glowTargetId === `stream-card-${emp.id}` ? '0 0 15px rgba(16, 185, 129, 0.3)' : ''
                   }}>
-                    <div className="stream-info" style={{ width: '22%' }}>
+                    <div className="stream-card-section stream-card-info">
                       <div className="avatar">{emp.avatar}</div>
                       <div className="engineer-details">
                         <h4>{emp.name}</h4>
@@ -1471,14 +1519,14 @@ function App() {
                       </div>
                     </div>
 
-                    <div style={{ width: '28%' }}>
+                    <div className="stream-card-section stream-card-address">
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '600' }}>Worker Digital Account Address</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#fff', wordBreak: 'break-all' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-main)', wordBreak: 'break-all', fontWeight: '600' }}>
                         {emp.address}
                       </div>
                     </div>
 
-                    <div className="stream-counter-wrapper" style={{ width: '20%' }}>
+                    <div className="stream-card-section stream-card-counter-wrapper">
                       <span className="stream-counter-label">Accruing Balance</span>
                       <div className="stream-counter-value">
                         {emp.accruedLive.toFixed(5)} USDC
@@ -1488,7 +1536,7 @@ function App() {
                       </span>
                     </div>
 
-                    <div className="stream-progress-bar-container" style={{ width: '15%' }}>
+                    <div className="stream-card-section stream-card-progress">
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                         <span>{(emp.accruedLive / emp.totalCap * 100).toFixed(1)}%</span>
                         <span>Limit: {emp.totalCap} USDC</span>
@@ -1501,7 +1549,7 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="stream-actions">
+                    <div className="stream-card-section stream-card-actions">
                       <button
                         className="btn btn-outline"
                         style={{ padding: '8px 12px' }}
