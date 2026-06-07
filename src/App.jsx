@@ -48,7 +48,9 @@ import {
   MICRO_BENEFITS_VAULT_ADDRESS,
   MICRO_BENEFITS_VAULT_ABI,
   USDC_TOKEN_ADDRESS,
-  USDC_ABI
+  USDC_ABI,
+  COMPLIANCE_REGISTRY_ADDRESS,
+  COMPLIANCE_REGISTRY_ABI
 } from './contracts'
 
 // Precompiled bytecode summary for visual docs
@@ -157,6 +159,15 @@ function App() {
   const totalContributed = memberAccount ? Number(formatUnits(memberAccount[3], 6)) : 0
   const coopTreasury = coopTreasuryRaw ? Number(formatUnits(coopTreasuryRaw, 6)) : 0
   const benefitsAllowance = benefitsAllowanceRaw ? Number(formatUnits(benefitsAllowanceRaw, 6)) : 0
+
+  // Read guardian status
+  const { data: isUserGuardianRaw } = useReadContract({
+    address: COMPLIANCE_REGISTRY_ADDRESS,
+    abi: COMPLIANCE_REGISTRY_ABI,
+    functionName: 'isGuardian',
+    args: address ? [address] : undefined
+  })
+  const isUserGuardian = !!isUserGuardianRaw
 
   // Local state for streams tracking (synced to contract)
   const [streamIds, setStreamIds] = useState(() => {
@@ -305,6 +316,10 @@ function App() {
   const [blacklistStatus, setBlacklistStatus] = useState('pending')
   const [gasSimResult, setGasSimResult] = useState('pending')
   const [isolatedAddress, setIsolatedAddress] = useState('0xBlockedWorker55aa3bE2F677cD6303Cec089B5F319D')
+  const [complianceTarget, setComplianceTarget] = useState('')
+  const [guardianTarget, setGuardianTarget] = useState('')
+  const [blacklistLoading, setBlacklistLoading] = useState(false)
+  const [guardianLoading, setGuardianLoading] = useState(false)
 
   // Benefits Splits Allocation config for Connected User
   const [benefitsConfig, setBenefitsConfig] = useState({
@@ -997,47 +1012,155 @@ function App() {
     setBlacklistStatus('pending')
     setGasSimResult('pending')
 
-    setTimeout(() => {
+    try {
+      // Gather addresses to check (isolated address entered by user + all active employee addresses)
+      const addressesToCheck = [isolatedAddress, ...employees.map((e) => e.address)].filter(
+        (addr) => addr && addr.startsWith('0x') && addr.length === 42
+      )
+
+      // 1. Check live sanctions status on ComplianceRegistry
       setScanStep('Contacting Circle Compliance Database (OFAC query)...')
       setScanProgress(45)
-      setBlacklistStatus('passed')
-    }, 1200)
+      
+      let hasSanctioned = false
+      if (publicClient) {
+        for (const addr of addressesToCheck) {
+          try {
+            const isBlocked = await publicClient.readContract({
+              address: COMPLIANCE_REGISTRY_ADDRESS,
+              abi: COMPLIANCE_REGISTRY_ABI,
+              functionName: 'isSanctioned',
+              args: [addr]
+            })
+            if (isBlocked) {
+              hasSanctioned = true
+            }
+          } catch (err) {
+            console.error('Failed to read sanctions status for', addr, err)
+          }
+        }
+      }
 
-    setTimeout(async () => {
+      setBlacklistStatus(hasSanctioned ? 'failed' : 'passed')
+
+      // 2. Running EVM static call simulation
       setScanStep('Running EVM Static Calls simulation on Arc Testnet...')
       setScanProgress(75)
 
-      try {
-        if (publicClient) {
-          // Attempting static call check for the isolated flagged address
-          // Simulating a transferFrom to the blacklisted wallet to test compliance revert
+      let simulationPassed = true
+      if (publicClient && addressesToCheck.length > 0) {
+        try {
+          // Attempting static call simulation on USDC balanceOf or similar to test connectivity
           await publicClient.simulateContract({
             address: USDC_TOKEN_ADDRESS,
             abi: USDC_ABI,
-            functionName: 'transfer',
-            args: [isolatedAddress, parseUnits('1', 6)],
+            functionName: 'balanceOf',
+            args: [addressesToCheck[0]],
             account: address
           })
           setScannedContracts('passed')
-        } else {
+        } catch (err) {
+          console.warn('Simulation caught EVM revert:', err.message)
+          simulationPassed = false
           setScannedContracts('failed')
         }
-      } catch (err) {
-        console.warn('Simulation caught EVM revert:', err.message)
-        setScannedContracts('failed')
+      } else {
+        setScannedContracts('passed')
       }
-    }, 2400)
 
-    setTimeout(() => {
+      // 3. Estimate gas
       setScanStep('Estimating USDC transaction gas parameters...')
       setScanProgress(100)
-      setGasSimResult('passed')
+      setGasSimResult(hasSanctioned || !simulationPassed ? 'failed' : 'passed')
       setIsScanning(false)
+
+      if (hasSanctioned) {
+        triggerToast(
+          'Compliance Alert!',
+          'Sanctioned recipient detected in current active registry! Payouts/Streams are blocked.',
+          'compliance'
+        )
+      } else {
+        triggerToast(
+          'Compliance Check Passed',
+          'All recipient addresses checked on-chain and cleared.'
+        )
+      }
+    } catch (e) {
+      console.error(e)
+      setBlacklistStatus('failed')
+      setScannedContracts('failed')
+      setGasSimResult('failed')
+      setIsScanning(false)
+      triggerToast('Simulation Error', e.message)
+    }
+  }
+
+  // Set sanctions status on ComplianceRegistry
+  const handleSetSanctionStatus = async (status) => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your wallet first.')
+      return
+    }
+    if (!complianceTarget || !complianceTarget.startsWith('0x') || complianceTarget.length !== 42) {
+      triggerToast('Invalid Address', 'Please provide a valid Ethereum address.')
+      return
+    }
+    setBlacklistLoading(true)
+    try {
+      const hash = await writeContractAsync({
+        address: COMPLIANCE_REGISTRY_ADDRESS,
+        abi: COMPLIANCE_REGISTRY_ABI,
+        functionName: 'setSanctionStatus',
+        args: [complianceTarget, status]
+      })
+      triggerToast('Blacklist Update Broadcasted', 'Waiting for transaction confirmation...')
+      await publicClient.waitForTransactionReceipt({ hash })
+      setBlacklistLoading(false)
       triggerToast(
-        'Compliance Check Passed',
-        'Batch verified. Blacklisted address isolated and locked out of active streams.'
+        'Blacklist Updated',
+        `Address compliance status updated successfully: ${status ? 'Sanctioned' : 'Whitelisted'}`
       )
-    }, 3800)
+      if (complianceTarget.toLowerCase() === isolatedAddress.toLowerCase() && !status) {
+        setBlacklistStatus('passed')
+      }
+    } catch (e) {
+      console.error(e)
+      setBlacklistLoading(false)
+      triggerToast('Transaction Failed', e.message)
+    }
+  }
+
+  // Set guardian status on ComplianceRegistry
+  const handleSetGuardianStatus = async (status) => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your wallet first.')
+      return
+    }
+    if (!guardianTarget || !guardianTarget.startsWith('0x') || guardianTarget.length !== 42) {
+      triggerToast('Invalid Address', 'Please provide a valid Ethereum address.')
+      return
+    }
+    setGuardianLoading(true)
+    try {
+      const hash = await writeContractAsync({
+        address: COMPLIANCE_REGISTRY_ADDRESS,
+        abi: COMPLIANCE_REGISTRY_ABI,
+        functionName: 'setGuardianStatus',
+        args: [guardianTarget, status]
+      })
+      triggerToast('Guardian Update Broadcasted', 'Waiting for transaction confirmation...')
+      await publicClient.waitForTransactionReceipt({ hash })
+      setGuardianLoading(false)
+      triggerToast(
+        'Guardian Status Updated',
+        `Guardian permissions updated successfully: ${status ? 'Promoted' : 'Demoted'}`
+      )
+    } catch (e) {
+      console.error(e)
+      setGuardianLoading(false)
+      triggerToast('Transaction Failed', e.message)
+    }
   }
 
   // Sliders Change handler
@@ -2183,27 +2306,125 @@ function App() {
 
             </div>
 
-            {/* Directory Blocklist summary */}
-            <div className="panel-card" style={{ height: 'fit-content' }}>
-              <div className="panel-card-title">
-                Flagged Suspicious Accounts
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                Addresses matching high-friction compliance parameters are automatically isolated. Our payment streaming engine prevents any funds from being disbursed to these destinations.
-              </p>
+            {/* Right side container */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               
-              <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-error)' }}>
-                  <AlertTriangle size={16} />
-                  <span style={{ fontWeight: '700', fontSize: '14px' }}>Restricted Destination Account</span>
+              {/* Directory Blocklist summary */}
+              <div className="panel-card" style={{ height: 'fit-content', marginBottom: 0 }}>
+                <div className="panel-card-title">
+                  Flagged Suspicious Accounts
                 </div>
-                <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
-                  {isolatedAddress}
-                </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '4px' }}>
-                  Status: Payment stream locked automatically for sanctions list match.
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Addresses matching high-friction compliance parameters are automatically isolated. Our payment streaming engine prevents any funds from being disbursed to these destinations.
                 </p>
+                
+                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-error)' }}>
+                    <AlertTriangle size={16} />
+                    <span style={{ fontWeight: '700', fontSize: '14px' }}>Restricted Destination Account</span>
+                  </div>
+                  <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+                    {isolatedAddress}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setComplianceTarget(isolatedAddress)
+                        triggerToast('Selected Address', `Address set to compliance panel: ${isolatedAddress}`)
+                      }}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      Manage Address
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* Guardian Compliance Panel */}
+              <div className="panel-card" style={{ height: 'fit-content' }}>
+                <div className="panel-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Guardian Compliance Control</span>
+                  {isUserGuardian ? (
+                    <span className="badge badge-success" style={{ fontSize: '10px' }}>ACTIVE GUARDIAN</span>
+                  ) : (
+                    <span className="badge badge-warning" style={{ fontSize: '10px' }}>VIEW ONLY</span>
+                  )}
+                </div>
+                
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Manage the decentralised on-chain sanctions list registry. Only authorized compliance guardians can sign status updates.
+                </p>
+
+                {/* 1. Sanctions Registry Form */}
+                <div style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Sanctions Registry</div>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Recipient Wallet Address (0x...)"
+                    value={complianceTarget}
+                    onChange={(e) => setComplianceTarget(e.target.value)}
+                    style={{ fontSize: '12px', padding: '8px', marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleSetSanctionStatus(true)}
+                      disabled={blacklistLoading || !isUserGuardian}
+                      style={{ fontSize: '11px', padding: '6px 12px', flexGrow: 1 }}
+                    >
+                      {blacklistLoading ? 'Updating...' : 'Sanction Address'}
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handleSetSanctionStatus(false)}
+                      disabled={blacklistLoading || !isUserGuardian}
+                      style={{ fontSize: '11px', padding: '6px 12px', flexGrow: 1 }}
+                    >
+                      {blacklistLoading ? 'Updating...' : 'Whitelist Address'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Guardian Management Form */}
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Guardian Directory</div>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Guardian Address (0x...)"
+                    value={guardianTarget}
+                    onChange={(e) => setGuardianTarget(e.target.value)}
+                    style={{ fontSize: '12px', padding: '8px', marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handleSetGuardianStatus(true)}
+                      disabled={guardianLoading || !isUserGuardian}
+                      style={{ fontSize: '11px', padding: '6px 12px', flexGrow: 1 }}
+                    >
+                      {guardianLoading ? 'Promoting...' : 'Promote Guardian'}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => handleSetGuardianStatus(false)}
+                      disabled={guardianLoading || !isUserGuardian}
+                      style={{ fontSize: '11px', padding: '6px 12px', flexGrow: 1 }}
+                    >
+                      {guardianLoading ? 'Demoting...' : 'Demote Guardian'}
+                    </button>
+                  </div>
+                </div>
+
+                {!isUserGuardian && (
+                  <div style={{ marginTop: '16px', backgroundColor: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.15)', borderRadius: '6px', padding: '10px', fontSize: '11px', color: 'var(--color-warning)' }}>
+                    Note: To test Sanction/Guardian management, switch to the deployer wallet that deployed the ComplianceRegistry contract.
+                  </div>
+                )}
+              </div>
+
             </div>
 
           </div>

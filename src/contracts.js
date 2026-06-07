@@ -326,3 +326,65 @@ export const MICRO_BENEFITS_VAULT_ABI = [
     type: 'function'
   }
 ];
+
+export const COMPLIANCE_REGISTRY_ADDRESS = '0x2Be357876a3D286C3a0d183861270a48bF2d377b';
+export const COMPLIANCE_REGISTRY_ABI = [
+  {
+    inputs: [],
+    stateMutability: 'nonpayable',
+    type: 'constructor'
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'guardian', type: 'address' },
+      { indexed: false, name: 'status', type: 'bool' }
+    ],
+    name: 'GuardianStatusUpdated',
+    type: 'event'
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'target', type: 'address' },
+      { indexed: false, name: 'status', type: 'bool' }
+    ],
+    name: 'SanctionStatusUpdated',
+    type: 'event'
+  },
+  {
+    inputs: [{ name: 'guardian', type: 'address' }],
+    name: 'isGuardian',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'target', type: 'address' }],
+    name: 'isSanctioned',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'guardian', type: 'address' },
+      { name: 'status', type: 'bool' }
+    ],
+    name: 'setGuardianStatus',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'target', type: 'address' },
+      { name: 'status', type: 'bool' }
+    ],
+    name: 'setSanctionStatus',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+];
+
