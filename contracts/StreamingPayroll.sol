@@ -179,4 +179,147 @@ contract StreamingPayroll {
 
         emit StreamCancelled(streamId, unspent);
     }
+
+    /**
+     * @notice Create multiple streaming payrolls in a single transaction.
+     * @param employees Array of remote worker addresses.
+     * @param flowRates Array of flow rates (USDC per second).
+     * @param totalCaps Array of total caps.
+     */
+    function createStreamsBatch(
+        address[] calldata employees,
+        uint256[] calldata flowRates,
+        uint256[] calldata totalCaps
+    ) external returns (bytes32[] memory) {
+        require(
+            employees.length == flowRates.length && flowRates.length == totalCaps.length,
+            "Mismatched input lengths"
+        );
+        require(employees.length > 0, "Empty arrays");
+
+        uint256 aggregateCap = 0;
+        for (uint256 i = 0; i < totalCaps.length; i++) {
+            aggregateCap += totalCaps[i];
+        }
+
+        // Lock aggregate cap from employer into contract in a single transfer
+        require(
+            IERC20(usdcToken).transferFrom(msg.sender, address(this), aggregateCap),
+            "USDC batch deposit failed"
+        );
+
+        bytes32[] memory streamIds = new bytes32[](employees.length);
+
+        for (uint256 i = 0; i < employees.length; i++) {
+            address employee = employees[i];
+            uint256 flowRate = flowRates[i];
+            uint256 totalCap = totalCaps[i];
+
+            require(employee != address(0), "Invalid employee address");
+            require(flowRate > 0, "Flow rate must be positive");
+            require(totalCap > 0, "Total cap must be positive");
+
+            // Salt using array index i to prevent collision
+            bytes32 streamId = keccak256(
+                abi.encodePacked(msg.sender, employee, block.timestamp, i)
+            );
+
+            streams[streamId] = Stream({
+                employer: msg.sender,
+                employee: employee,
+                flowRate: flowRate,
+                startTime: block.timestamp,
+                lastUpdated: block.timestamp,
+                accruedPaid: 0,
+                totalCap: totalCap,
+                isActive: true
+            });
+
+            employeeStreams[employee].push(streamId);
+            employerStreams[msg.sender].push(streamId);
+
+            emit StreamCreated(streamId, msg.sender, employee, flowRate, totalCap);
+            streamIds[i] = streamId;
+        }
+
+        return streamIds;
+    }
+
+    /**
+     * @notice Pause multiple streams, marking them inactive and distributing any accrued funds up to this timestamp.
+     * @param streamIds Array of stream IDs to pause.
+     */
+    function pauseStreamsBatch(bytes32[] calldata streamIds) external {
+        for (uint256 i = 0; i < streamIds.length; i++) {
+            bytes32 streamId = streamIds[i];
+            Stream storage stream = streams[streamId];
+            require(stream.employer == msg.sender, "Only stream employer can pause");
+            require(stream.isActive, "Stream is not active");
+
+            uint256 claimable = getClaimableAmount(streamId);
+            stream.lastUpdated = block.timestamp;
+            stream.isActive = false;
+
+            if (claimable > 0) {
+                stream.accruedPaid += claimable;
+                require(
+                    IERC20(usdcToken).transfer(stream.employee, claimable),
+                    "USDC transfer to employee failed"
+                );
+                emit FundsWithdrawn(streamId, stream.employee, claimable);
+            }
+            
+            emit StreamUpdated(streamId, 0);
+        }
+    }
+
+    /**
+     * @notice Resume multiple paused streams, reactivation accrual from the current timestamp.
+     * @param streamIds Array of stream IDs to resume.
+     */
+    function resumeStreamsBatch(bytes32[] calldata streamIds) external {
+        for (uint256 i = 0; i < streamIds.length; i++) {
+            bytes32 streamId = streamIds[i];
+            Stream storage stream = streams[streamId];
+            require(stream.employer == msg.sender, "Only stream employer can resume");
+            require(!stream.isActive, "Stream is already active");
+            require(stream.accruedPaid < stream.totalCap, "Stream already fully completed");
+
+            stream.lastUpdated = block.timestamp;
+            stream.isActive = true;
+
+            emit StreamUpdated(streamId, stream.flowRate);
+        }
+    }
+
+    /**
+     * @notice Withdraw funds from multiple streams where msg.sender is the registered employee.
+     * @param streamIds Array of stream IDs to claim from.
+     */
+    function withdrawFundsBatch(bytes32[] calldata streamIds) external {
+        for (uint256 i = 0; i < streamIds.length; i++) {
+            bytes32 streamId = streamIds[i];
+            Stream storage stream = streams[streamId];
+            require(stream.employee == msg.sender, "Only stream employee can withdraw");
+            require(stream.isActive, "Stream is not active");
+
+            uint256 claimable = getClaimableAmount(streamId);
+            if (claimable > 0) {
+                stream.accruedPaid += claimable;
+                stream.lastUpdated = block.timestamp;
+
+                if (stream.accruedPaid >= stream.totalCap) {
+                    stream.isActive = false;
+                }
+
+                require(
+                    IERC20(usdcToken).transfer(stream.employee, claimable),
+                    "USDC transfer failed"
+                );
+
+                emit FundsWithdrawn(streamId, stream.employee, claimable);
+            }
+        }
+    }
 }
+
