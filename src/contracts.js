@@ -313,8 +313,8 @@ export const MICRO_BENEFITS_VAULT_ABI = [
     name: 'members',
     outputs: [
       { name: 'healthInsuranceBalance', type: 'uint256' },
-      { name: 'retirementBalance', type: 'uint256' },
-      { name: 'emergencyFundBalance', type: 'uint256' },
+      { name: 'retirementShares', type: 'uint256' },
+      { name: 'emergencyShares', type: 'uint256' },
       { name: 'totalContributed', type: 'uint256' },
       { name: 'isRegistered', type: 'bool' }
     ],
@@ -338,6 +338,31 @@ export const MICRO_BENEFITS_VAULT_ABI = [
   {
     inputs: [],
     name: 'verifierAgent',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'yieldVault',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
+
+export const YIELD_VAULT_ADDRESS = '0xD8b934580FC4259bBD8a1cdb21bf9C1c71EF4242';
+export const YIELD_VAULT_ABI = [
+  {
+    inputs: [{ name: 'shares', type: 'uint256' }],
+    name: 'convertToAssets',
+    outputs: [{ name: 'assets', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'asset',
     outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
     type: 'function'
