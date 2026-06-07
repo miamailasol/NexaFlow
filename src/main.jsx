@@ -7,15 +7,16 @@ import App from './App.jsx'
 import '@rainbow-me/rainbowkit/styles.css'
 import { getDefaultConfig, RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { WagmiProvider, http } from 'wagmi'
-import { arcTestnet } from 'viem/chains'
+import { arcTestnet, baseSepolia } from 'viem/chains'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const config = getDefaultConfig({
   appName: 'NexaFlow',
   projectId: '24c5b3648507204556488d374cb7605d',
-  chains: [arcTestnet],
+  chains: [arcTestnet, baseSepolia],
   transports: {
-    [arcTestnet.id]: http('https://rpc.testnet.arc.network')
+    [arcTestnet.id]: http('https://rpc.testnet.arc.network'),
+    [baseSepolia.id]: http('https://sepolia.base.org')
   },
 })
 

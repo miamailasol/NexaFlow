@@ -213,6 +213,23 @@ export const STREAMING_PAYROLL_ABI = [
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'address' }],
+    name: 'employerBalances',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'employer', type: 'address' },
+      { name: 'amount', type: 'uint256' }
+    ],
+    name: 'creditEmployerBalance',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
   }
 ];
 
@@ -387,4 +404,19 @@ export const COMPLIANCE_REGISTRY_ABI = [
     type: 'function'
   }
 ];
+
+export const CROSS_CHAIN_TREASURY_ADDRESS = '0xb41FA5B3cCD28d7F3d4203A2B78D12dE42eE5019';
+export const CROSS_CHAIN_TREASURY_ABI = [
+  {
+    inputs: [
+      { name: 'message', type: 'bytes' },
+      { name: 'attestation', type: 'bytes' }
+    ],
+    name: 'claimUSDCFromBridge',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+];
+
 
