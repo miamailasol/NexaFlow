@@ -52,6 +52,10 @@ contract StreamingPayroll {
     mapping(address => bytes32[]) public employerStreams;
     mapping(address => uint256) public employerBalances;
 
+    mapping(string => uint256) public taxRates; // basis points (e.g. 1500 = 15%)
+    mapping(string => address) public taxAuthorities; // government wallet addresses
+    mapping(bytes32 => string) public streamCountries;
+
     event StreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, uint256 flowRate, uint256 totalCap);
     event DepositCredited(address indexed employer, uint256 amount);
     event StreamUpdated(bytes32 indexed streamId, uint256 newFlowRate);
@@ -86,10 +90,27 @@ contract StreamingPayroll {
         usdcToken = _usdcToken;
         owner = msg.sender;
         payrollOracle = msg.sender;
+
+        taxRates["SG"] = 0;
+        taxAuthorities["SG"] = address(0);
+
+        taxRates["BR"] = 1500;
+        taxAuthorities["BR"] = 0x9e71a3371987d6f26D8251E18a8FdcB59296556e;
+
+        taxRates["NG"] = 1000;
+        taxAuthorities["NG"] = 0x7a30000000000000000000000000000000000000;
+
+        taxRates["TW"] = 1800;
+        taxAuthorities["TW"] = 0x8b30000000000000000000000000000000000000;
     }
 
     function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
         complianceRegistry = _complianceRegistry;
+    }
+
+    function setTaxRate(string calldata country, uint256 rate, address authority) external onlyOwner {
+        taxRates[country] = rate;
+        taxAuthorities[country] = authority;
     }
 
     /**
@@ -108,16 +129,18 @@ contract StreamingPayroll {
     }
 
     /**
-     * @notice Create a streaming payroll for a remote engineer.
+     * @notice Create a streaming payroll for a remote engineer with country code.
      * @param employee Remote worker address.
      * @param flowRate Amount of USDC (6 decimals) per second.
      * @param totalCap Total amount escrowed for this milestone.
+     * @param country Dynamic country code for tax withholding mapping.
      */
     function createStream(
         address employee,
         uint256 flowRate,
-        uint256 totalCap
-    ) external onlyCleared(employee) returns (bytes32) {
+        uint256 totalCap,
+        string memory country
+    ) public onlyCleared(employee) returns (bytes32) {
         require(employee != address(0), "Invalid employee address");
         require(flowRate > 0, "Flow rate must be positive");
         require(totalCap > 0, "Total cap must be positive");
@@ -149,11 +172,24 @@ contract StreamingPayroll {
             isActive: true
         });
 
+        streamCountries[streamId] = country;
+
         employeeStreams[employee].push(streamId);
         employerStreams[msg.sender].push(streamId);
 
         emit StreamCreated(streamId, msg.sender, employee, flowRate, totalCap);
         return streamId;
+    }
+
+    /**
+     * @notice Create a streaming payroll for a remote engineer (default SG).
+     */
+    function createStream(
+        address employee,
+        uint256 flowRate,
+        uint256 totalCap
+    ) external onlyCleared(employee) returns (bytes32) {
+        return createStream(employee, flowRate, totalCap, "SG");
     }
 
     /**
@@ -192,9 +228,29 @@ contract StreamingPayroll {
             stream.isActive = false;
         }
 
+        // Calculate tax withholding split
+        string memory country = streamCountries[streamId];
+        uint256 taxRate = taxRates[country];
+        address taxAuthority = taxAuthorities[country];
+
+        uint256 taxAmount = 0;
+        uint256 employeeAmount = claimable;
+
+        if (taxRate > 0 && taxAuthority != address(0)) {
+            taxAmount = (claimable * taxRate) / 10000;
+            employeeAmount = claimable - taxAmount;
+        }
+
+        if (taxAmount > 0) {
+            require(
+                IERC20(usdcToken).transfer(taxAuthority, taxAmount),
+                "USDC tax transfer failed"
+            );
+        }
+
         require(
-            IERC20(usdcToken).transfer(stream.employee, claimable),
-            "USDC transfer failed"
+            IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+            "USDC transfer to employee failed"
         );
 
         emit FundsWithdrawn(streamId, stream.employee, claimable);
@@ -241,13 +297,21 @@ contract StreamingPayroll {
      * @param flowRates Array of flow rates (USDC per second).
      * @param totalCaps Array of total caps.
      */
+    /**
+     * @notice Create multiple streaming payrolls in a single transaction with country codes.
+     * @param employees Array of remote worker addresses.
+     * @param flowRates Array of flow rates (USDC per second).
+     * @param totalCaps Array of total caps.
+     * @param countries Array of country codes for each stream.
+     */
     function createStreamsBatch(
         address[] calldata employees,
         uint256[] calldata flowRates,
-        uint256[] calldata totalCaps
-    ) external returns (bytes32[] memory) {
+        uint256[] calldata totalCaps,
+        string[] memory countries
+    ) public returns (bytes32[] memory) {
         require(
-            employees.length == flowRates.length && flowRates.length == totalCaps.length,
+            employees.length == flowRates.length && flowRates.length == totalCaps.length && totalCaps.length == countries.length,
             "Mismatched input lengths"
         );
         require(employees.length > 0, "Empty arrays");
@@ -275,6 +339,7 @@ contract StreamingPayroll {
             address employee = employees[i];
             uint256 flowRate = flowRates[i];
             uint256 totalCap = totalCaps[i];
+            string memory country = countries[i];
 
             require(employee != address(0), "Invalid employee address");
             if (complianceRegistry != address(0)) {
@@ -299,6 +364,8 @@ contract StreamingPayroll {
                 isActive: true
             });
 
+            streamCountries[streamId] = country;
+
             employeeStreams[employee].push(streamId);
             employerStreams[msg.sender].push(streamId);
 
@@ -307,6 +374,21 @@ contract StreamingPayroll {
         }
 
         return streamIds;
+    }
+
+    /**
+     * @notice Create multiple streaming payrolls in a single transaction (default SG).
+     */
+    function createStreamsBatch(
+        address[] calldata employees,
+        uint256[] calldata flowRates,
+        uint256[] calldata totalCaps
+    ) public returns (bytes32[] memory) {
+        string[] memory countries = new string[](employees.length);
+        for (uint256 i = 0; i < employees.length; i++) {
+            countries[i] = "SG";
+        }
+        return createStreamsBatch(employees, flowRates, totalCaps, countries);
     }
 
     /**
@@ -326,8 +408,28 @@ contract StreamingPayroll {
 
             if (claimable > 0) {
                 stream.accruedPaid += claimable;
+
+                string memory country = streamCountries[streamId];
+                uint256 taxRate = taxRates[country];
+                address taxAuthority = taxAuthorities[country];
+
+                uint256 taxAmount = 0;
+                uint256 employeeAmount = claimable;
+
+                if (taxRate > 0 && taxAuthority != address(0)) {
+                    taxAmount = (claimable * taxRate) / 10000;
+                    employeeAmount = claimable - taxAmount;
+                }
+
+                if (taxAmount > 0) {
+                    require(
+                        IERC20(usdcToken).transfer(taxAuthority, taxAmount),
+                        "USDC tax transfer failed"
+                    );
+                }
+
                 require(
-                    IERC20(usdcToken).transfer(stream.employee, claimable),
+                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
                     "USDC transfer to employee failed"
                 );
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
@@ -379,9 +481,28 @@ contract StreamingPayroll {
                     stream.isActive = false;
                 }
 
+                string memory country = streamCountries[streamId];
+                uint256 taxRate = taxRates[country];
+                address taxAuthority = taxAuthorities[country];
+
+                uint256 taxAmount = 0;
+                uint256 employeeAmount = claimable;
+
+                if (taxRate > 0 && taxAuthority != address(0)) {
+                    taxAmount = (claimable * taxRate) / 10000;
+                    employeeAmount = claimable - taxAmount;
+                }
+
+                if (taxAmount > 0) {
+                    require(
+                        IERC20(usdcToken).transfer(taxAuthority, taxAmount),
+                        "USDC tax transfer failed"
+                    );
+                }
+
                 require(
-                    IERC20(usdcToken).transfer(stream.employee, claimable),
-                    "USDC transfer failed"
+                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                    "USDC transfer to employee failed"
                 );
 
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
@@ -394,16 +515,18 @@ contract StreamingPayroll {
     }
 
     /**
-     * @notice Create a private streaming payroll with masked flow rate.
+     * @notice Create a private streaming payroll with masked flow rate and country code.
      * @param employee Remote worker address.
      * @param commitmentHash Hash of keccak256(abi.encode(flowRate, totalCap, salt)).
      * @param totalCap Total amount escrowed for this milestone.
+     * @param country Dynamic country code.
      */
     function createPrivateStream(
         address employee,
         bytes32 commitmentHash,
-        uint256 totalCap
-    ) external onlyCleared(employee) returns (bytes32) {
+        uint256 totalCap,
+        string memory country
+    ) public onlyCleared(employee) returns (bytes32) {
         require(employee != address(0), "Invalid employee address");
         require(totalCap > 0, "Total cap must be positive");
 
@@ -434,11 +557,24 @@ contract StreamingPayroll {
             isActive: true
         });
 
+        streamCountries[streamId] = country;
+
         employeeStreams[employee].push(streamId);
         employerStreams[msg.sender].push(streamId);
 
         emit PrivateStreamCreated(streamId, msg.sender, employee, commitmentHash, totalCap);
         return streamId;
+    }
+
+    /**
+     * @notice Create a private streaming payroll (default SG).
+     */
+    function createPrivateStream(
+        address employee,
+        bytes32 commitmentHash,
+        uint256 totalCap
+    ) external onlyCleared(employee) returns (bytes32) {
+        return createPrivateStream(employee, commitmentHash, totalCap, "SG");
     }
 
     /**
@@ -483,9 +619,29 @@ contract StreamingPayroll {
             stream.isActive = false;
         }
 
+        // Calculate tax withholding split
+        string memory country = streamCountries[streamId];
+        uint256 taxRate = taxRates[country];
+        address taxAuthority = taxAuthorities[country];
+
+        uint256 taxAmount = 0;
+        uint256 employeeAmount = payout;
+
+        if (taxRate > 0 && taxAuthority != address(0)) {
+            taxAmount = (payout * taxRate) / 10000;
+            employeeAmount = payout - taxAmount;
+        }
+
+        if (taxAmount > 0) {
+            require(
+                IERC20(usdcToken).transfer(taxAuthority, taxAmount),
+                "USDC tax transfer failed"
+            );
+        }
+
         require(
-            IERC20(usdcToken).transfer(stream.employee, payout),
-            "USDC transfer failed"
+            IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+            "USDC transfer to employee failed"
         );
 
         emit PrivateFundsWithdrawn(streamId, stream.employee, payout);

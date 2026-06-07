@@ -266,4 +266,62 @@ describe("StreamingPayroll Batch Operations", function () {
             ).to.be.revertedWith("Invalid oracle signature");
         });
     });
+
+    describe("Jurisdictional Tax Withholding", function () {
+        it("should successfully split and route 15% tax for Brazil stream", async function () {
+            const taxAuthority = "0x9e71a3371987d6f26D8251E18a8FdcB59296556e";
+            const createStreamFn = streamingPayroll.getFunction("createStream(address,uint256,uint256,string)");
+            const tx = await createStreamFn(employee1.address, 10n, 1000n, "BR");
+            const receipt = await tx.wait();
+
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+            const timestamp = block.timestamp;
+            const streamId = ethers.solidityPackedKeccak256(
+                ["address", "address", "uint256"],
+                [owner.address, employee1.address, timestamp]
+            );
+
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine");
+
+            const initialEmployeeBalance = await mockUSDC.balanceOf(employee1.address);
+            const initialTaxAuthorityBalance = await mockUSDC.balanceOf(taxAuthority);
+
+            const withdrawTx = await streamingPayroll.connect(employee1).withdrawFunds(streamId);
+            await withdrawTx.wait();
+
+            const finalEmployeeBalance = await mockUSDC.balanceOf(employee1.address);
+            const finalTaxAuthorityBalance = await mockUSDC.balanceOf(taxAuthority);
+
+            const employeeAccrued = finalEmployeeBalance - initialEmployeeBalance;
+            const taxAccrued = finalTaxAuthorityBalance - initialTaxAuthorityBalance;
+            const totalWithdrawn = employeeAccrued + taxAccrued;
+
+            expect(taxAccrued).to.equal((totalWithdrawn * 1500n) / 10000n);
+            expect(employeeAccrued).to.equal(totalWithdrawn - taxAccrued);
+        });
+
+        it("should apply 0% withholding for Singapore stream by default", async function () {
+            const tx = await streamingPayroll.createStream(employee1.address, 10n, 1000n);
+            const receipt = await tx.wait();
+
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+            const timestamp = block.timestamp;
+            const streamId = ethers.solidityPackedKeccak256(
+                ["address", "address", "uint256"],
+                [owner.address, employee1.address, timestamp]
+            );
+
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine");
+
+            const initialEmployeeBalance = await mockUSDC.balanceOf(employee1.address);
+
+            const withdrawTx = await streamingPayroll.connect(employee1).withdrawFunds(streamId);
+            await withdrawTx.wait();
+
+            const finalEmployeeBalance = await mockUSDC.balanceOf(employee1.address);
+            expect(finalEmployeeBalance - initialEmployeeBalance).to.be.greaterThan(0n);
+        });
+    });
 });

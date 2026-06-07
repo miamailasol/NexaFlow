@@ -104,7 +104,8 @@ export const STREAMING_PAYROLL_ABI = [
     inputs: [
       { name: 'employee', type: 'address' },
       { name: 'flowRate', type: 'uint256' },
-      { name: 'totalCap', type: 'uint256' }
+      { name: 'totalCap', type: 'uint256' },
+      { name: 'country', type: 'string' }
     ],
     name: 'createStream',
     outputs: [{ name: '', type: 'bytes32' }],
@@ -186,7 +187,8 @@ export const STREAMING_PAYROLL_ABI = [
     inputs: [
       { name: 'employees', type: 'address[]' },
       { name: 'flowRates', type: 'uint256[]' },
-      { name: 'totalCaps', type: 'uint256[]' }
+      { name: 'totalCaps', type: 'uint256[]' },
+      { name: 'countries', type: 'string[]' }
     ],
     name: 'createStreamsBatch',
     outputs: [{ name: '', type: 'bytes32[]' }],
@@ -235,7 +237,8 @@ export const STREAMING_PAYROLL_ABI = [
     inputs: [
       { name: 'employee', type: 'address' },
       { name: 'commitmentHash', type: 'bytes32' },
-      { name: 'totalCap', type: 'uint256' }
+      { name: 'totalCap', type: 'uint256' },
+      { name: 'country', type: 'string' }
     ],
     name: 'createPrivateStream',
     outputs: [{ name: '', type: 'bytes32' }],
@@ -268,6 +271,13 @@ export const STREAMING_PAYROLL_ABI = [
       { name: 'totalCap', type: 'uint256' },
       { name: 'isActive', type: 'bool' }
     ],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'bytes32' }],
+    name: 'streamCountries',
+    outputs: [{ name: '', type: 'string' }],
     stateMutability: 'view',
     type: 'function'
   }
