@@ -22,7 +22,8 @@ import {
   RefreshCw,
   ExternalLink,
   Code,
-  Menu
+  Menu,
+  Cpu
 } from 'lucide-react'
 import './App.css'
 
@@ -321,6 +322,18 @@ function App() {
   const [blacklistLoading, setBlacklistLoading] = useState(false)
   const [guardianLoading, setGuardianLoading] = useState(false)
 
+  // Treasury Auto-Pilot (Circle Developer-Controlled Wallets)
+  const [autoPilot, setAutoPilot] = useState(() => {
+    return localStorage.getItem('nexaflow_autopilot') === 'true'
+  })
+  const [dcwAddress, setDcwAddress] = useState('')
+  const [dcwWalletId, setDcwWalletId] = useState('')
+  const [dcwBalance, setDcwBalance] = useState('0.00')
+  const [dcwIsLive, setDcwIsLive] = useState(false)
+  const [isDcwCreating, setIsDcwCreating] = useState(false)
+  const [dcwError, setDcwError] = useState('')
+
+
   // Benefits Splits Allocation config for Connected User
   const [benefitsConfig, setBenefitsConfig] = useState({
     health: 5,
@@ -372,6 +385,90 @@ function App() {
     requestRef.current = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(requestRef.current)
   }, [])
+
+  // Fetch DCW status on component mount or autopilot change
+  useEffect(() => {
+    const checkDcwStatus = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/treasury/status')
+        const data = await res.json()
+        setDcwIsLive(data.isLiveMode)
+        if (data.address) {
+          setDcwAddress(data.address)
+          setDcwWalletId(data.walletId)
+          // Fetch balance
+          const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${data.address}`)
+          const balData = await balRes.json()
+          if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
+            setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
+          }
+        }
+      } catch (e) {
+        console.warn('DCW service is offline:', e.message)
+        setDcwError('DCW backend service is offline')
+      }
+    }
+    
+    checkDcwStatus()
+  }, [autoPilot])
+
+  const handleToggleAutoPilot = () => {
+    const next = !autoPilot
+    setAutoPilot(next)
+    localStorage.setItem('nexaflow_autopilot', String(next))
+    triggerToast(
+      next ? 'Auto-Pilot Activated' : 'Auto-Pilot Deactivated',
+      next ? 'Employer streams will be signed and funded via Circle Developer-Controlled Wallets.' : 'Back to manual MetaMask stream creation mode.'
+    )
+  }
+
+  const handleProvisionDcw = async () => {
+    setIsDcwCreating(true)
+    setDcwError('')
+    try {
+      const res = await fetch('http://localhost:3001/api/treasury/create-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      const data = await res.json()
+      if (data.success) {
+        setDcwAddress(data.address)
+        setDcwWalletId(data.walletId)
+        triggerToast('Developer Wallet Created', `Wallet: ${data.address}`)
+        
+        // Fetch balance
+        const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${data.address}`)
+        const balData = await balRes.json()
+        if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
+          setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
+        }
+      } else {
+        setDcwError(data.error || 'Failed to create wallet')
+        triggerToast('Creation Failed', data.error || 'Failed to create wallet')
+      }
+    } catch (e) {
+      console.error(e)
+      setDcwError('DCW backend service is offline')
+      triggerToast('Connection Error', 'Backend service at port 3001 is offline.')
+    } finally {
+      setIsDcwCreating(false)
+    }
+  }
+
+  const handleRefreshDcwBalance = async () => {
+    if (!dcwAddress) return
+    try {
+      const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${dcwAddress}`)
+      const balData = await balRes.json()
+      if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
+        setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
+        triggerToast('Balance Refreshed', `New Balance: ${Number(balData.tokenBalances[0].amount).toFixed(2)} USDC`)
+      }
+    } catch (e) {
+      console.error(e)
+      triggerToast('Error Refreshing Balance', e.message)
+    }
+  }
 
   // Show customized alert
   const triggerToast = (title, body, targetId = null) => {
@@ -518,6 +615,79 @@ function App() {
   // Handle Stream escrow deployment
   const handleCreateStream = async (e) => {
     e.preventDefault()
+
+    if (autoPilot) {
+      if (!dcwAddress) {
+        triggerToast('DCW Wallet Required', 'Please provision your Developer-Controlled Wallet first.')
+        return
+      }
+      setApproveLoading(true)
+      try {
+        const flowRateRaw = parseUnits(newEmployeeRate.toString(), 6)
+        const totalCapRaw = parseUnits(newEmployeeCap.toString(), 6)
+        
+        triggerToast('Requesting Circle DCW', 'Broadcasting automatic stream via Circle API...')
+        const response = await fetch('http://localhost:3001/api/payroll/start-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employee: newEmployeeAddress,
+            flowRate: flowRateRaw.toString(),
+            totalCap: totalCapRaw.toString(),
+            contractAddress: STREAMING_PAYROLL_ADDRESS
+          })
+        })
+        const result = await response.json()
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to start stream via DCW')
+        }
+
+        const streamId = ('0x' + Math.random().toString(16).substr(2, 64)).padEnd(66, '0')
+        
+        triggerToast('Auto-Pilot Transaction Executed', `Stream established. Hash: ${result.txHash ? result.txHash.substr(0, 10) + '...' : 'pending'}`)
+        
+        const newEmp = {
+          id: streamId,
+          name: newEmployeeName,
+          role: newEmployeeRole || 'Developer',
+          location: newEmployeeLoc,
+          address: newEmployeeAddress,
+          flowRate: Number(newEmployeeRate),
+          totalCap: Number(newEmployeeCap),
+          accruedPaid: 0,
+          accruedLive: 0,
+          lastUpdated: Math.floor(Date.now() / 1000),
+          isActive: true,
+          healthPercent: 5,
+          retirementPercent: 5,
+          emergencyPercent: 5,
+          complianceStatus: 'Verified',
+          avatar: newEmployeeName.split(' ').map((n) => n[0]).join('').toUpperCase().substr(0, 2)
+        }
+
+        setEmployees((prev) => [newEmp, ...prev])
+        const updatedIds = [streamId, ...streamIds]
+        setStreamIds(updatedIds)
+        localStorage.setItem('nexaflow_stream_ids', JSON.stringify(updatedIds))
+        
+        setTimeout(() => handleRefreshDcwBalance(), 3000)
+        setApproveLoading(false)
+        
+        // Reset form inputs
+        setNewEmployeeName('')
+        setNewEmployeeAddress('')
+        setNewEmployeeRate('0.005')
+        setNewEmployeeCap('100.00')
+        setNewEmployeeRole('')
+        setNewEmployeeLoc('SG')
+      } catch (err) {
+        console.error(err)
+        setApproveLoading(false)
+        triggerToast('Auto-Pilot Failed', err.message)
+      }
+      return
+    }
+
     if (!isConnected) {
       triggerToast('Wallet not connected', 'Please connect your Web3 wallet first.')
       return
@@ -1651,6 +1821,95 @@ function App() {
                 <div className="stats-footer">
                   <span style={{ color: 'var(--color-success)' }}>Zero delay</span>
                   <span>no manual bank processing</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Circle Developer-Controlled Wallets Auto-Pilot Treasury Control Panel */}
+            <div className="panel-card" style={{ marginBottom: '24px' }}>
+              <div className="panel-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Cpu size={18} color="var(--color-secondary)" />
+                  <span style={{ fontSize: '16px', fontWeight: 'bold' }}>Treasury Auto-Pilot (Circle Developer-Controlled Wallets)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px' }}>AUTO-PILOT:</span>
+                  <button
+                    className={`btn btn-sm ${autoPilot ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={handleToggleAutoPilot}
+                    style={{ fontSize: '11px', padding: '4px 12px', border: '1.5px solid var(--border-color)' }}
+                  >
+                    {autoPilot ? 'ACTIVE (AUTOMATED)' : 'DISABLED (MANUAL)'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '16px' }}>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Automated Corporate Escrow Key</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    Provision an on-chain developer-controlled wallet to handle sub-second payouts and streaming setups programmatically. Eliminates the need for manual browser-extension signature prompts.
+                  </p>
+                  
+                  {dcwAddress ? (
+                    <div style={{ backgroundColor: 'rgba(192, 132, 252, 0.05)', border: '1.5px solid var(--border-color)', borderRadius: '6px', padding: '12px' }}>
+                      <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                        <strong>DCW Address:</strong> {dcwAddress}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        <strong>Wallet ID:</strong> {dcwWalletId}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleProvisionDcw}
+                        disabled={isDcwCreating}
+                        style={{ fontSize: '12px', padding: '8px 16px' }}
+                      >
+                        {isDcwCreating ? 'Provisioning Wallet...' : 'Provision Corporate Developer Wallet'}
+                      </button>
+                      {dcwError && (
+                        <div style={{ fontSize: '12px', color: 'var(--color-error)', marginTop: '8px' }}>
+                          {dcwError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderLeft: '1.5px solid var(--border-color)', paddingLeft: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Circle Developer Console Sync</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Status:</span>
+                      {dcwAddress ? (
+                        <span className="badge badge-success" style={{ fontSize: '11px' }}>
+                          {dcwIsLive ? 'LIVE (CIRCLE INTEGRATED)' : 'DEMO MODE (MOCKED)'}
+                        </span>
+                      ) : (
+                        <span className="badge badge-warning" style={{ fontSize: '11px' }}>NOT INITIATED</span>
+                      )}
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>DCW Treasury Balance:</span>
+                      <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)' }}>
+                        {dcwBalance} USDC
+                      </span>
+                    </div>
+                  </div>
+
+                  {dcwAddress && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleRefreshDcwBalance}
+                      style={{ fontSize: '12px', padding: '8px 16px', alignSelf: 'flex-start' }}
+                    >
+                      Refresh Treasury Balance
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
