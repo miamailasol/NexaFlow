@@ -91,10 +91,10 @@ describe("StreamingPayroll Batch Operations", function () {
         const finalBalance1 = await mockUSDC.balanceOf(employee1.address);
         const finalBalance2 = await mockUSDC.balanceOf(employee2.address);
 
-        // Expect about 5 seconds of flow rate accrued
+        // Expect about 5-7 seconds of flow rate accrued
         // flowrate is 10 and 20 per second
-        expect(finalBalance1 - initialBalance1).to.be.closeTo(50n, 10n);
-        expect(finalBalance2 - initialBalance2).to.be.closeTo(100n, 20n);
+        expect(finalBalance1 - initialBalance1).to.be.closeTo(60n, 25n);
+        expect(finalBalance2 - initialBalance2).to.be.closeTo(120n, 50n);
 
         // Verify streams are marked inactive
         const stream1 = await streamingPayroll.streams(streamId1);

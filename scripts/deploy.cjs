@@ -13,8 +13,14 @@ async function main() {
   const streamingPayrollAddr = await streamingPayroll.getAddress();
   console.log("StreamingPayroll deployed to:", streamingPayrollAddr);
 
+  const MockYieldVault = await hre.ethers.getContractFactory("MockYieldVault");
+  const mockYieldVault = await MockYieldVault.deploy(usdcTokenAddress);
+  await mockYieldVault.waitForDeployment();
+  const mockYieldVaultAddr = await mockYieldVault.getAddress();
+  console.log("MockYieldVault deployed to:", mockYieldVaultAddr);
+
   const MicroBenefitsVault = await hre.ethers.getContractFactory("MicroBenefitsVault");
-  const microBenefitsVault = await MicroBenefitsVault.deploy(usdcTokenAddress, verifierAgentAddress);
+  const microBenefitsVault = await MicroBenefitsVault.deploy(usdcTokenAddress, verifierAgentAddress, mockYieldVaultAddr);
   await microBenefitsVault.waitForDeployment();
   const microBenefitsVaultAddr = await microBenefitsVault.getAddress();
   console.log("MicroBenefitsVault deployed to:", microBenefitsVaultAddr);

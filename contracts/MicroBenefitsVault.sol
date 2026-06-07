@@ -10,23 +10,33 @@ interface IERC20 {
     function transfer(address to, uint256 value) external returns (bool);
     function transferFrom(address from, address to, uint256 value) external returns (bool);
     function balanceOf(address account) external view returns (uint256);
+    function approve(address spender, uint256 value) external returns (bool);
 }
 
 interface ICompliance {
     function isSanctioned(address target) external view returns (bool);
 }
 
+interface IERC4626 {
+    function asset() external view returns (address);
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
+    function convertToShares(uint256 assets) external view returns (uint256 shares);
+}
+
 contract MicroBenefitsVault {
     struct MemberAccount {
         uint256 healthInsuranceBalance;
-        uint256 retirementBalance;
-        uint256 emergencyFundBalance;
+        uint256 retirementShares;
+        uint256 emergencyShares;
         uint256 totalContributed;
         bool isRegistered;
     }
 
     // USDC Address on Arc Chain: 0x3600000000000000000000000000000000000000
     address public immutable usdcToken;
+    address public immutable yieldVault;
     address public owner;
     address public verifierAgent; // Authorized AI Agent/Oracle for validating medical bills
     address public complianceRegistry;
@@ -59,10 +69,11 @@ contract MicroBenefitsVault {
         _;
     }
 
-    constructor(address _usdcToken, address _verifierAgent) {
+    constructor(address _usdcToken, address _verifierAgent, address _yieldVault) {
         usdcToken = _usdcToken;
         owner = msg.sender;
         verifierAgent = _verifierAgent;
+        yieldVault = _yieldVault;
     }
 
     function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
@@ -82,8 +93,8 @@ contract MicroBenefitsVault {
         require(!members[member].isRegistered, "Member already registered");
         members[member] = MemberAccount({
             healthInsuranceBalance: 0,
-            retirementBalance: 0,
-            emergencyFundBalance: 0,
+            retirementShares: 0,
+            emergencyShares: 0,
             totalContributed: 0,
             isRegistered: true
         });
@@ -115,13 +126,26 @@ contract MicroBenefitsVault {
 
         MemberAccount storage acc = members[member];
         acc.healthInsuranceBalance += health;
-        acc.retirementBalance += retirement;
-        acc.emergencyFundBalance += emergency;
         acc.totalContributed += total;
 
         // Route health portion partially to co-op pool to hedge risks
         uint256 coopPortion = health * 20 / 100; // 20% to global pooling
         insuranceCoopTreasury += coopPortion;
+
+        // Approve and route pension and emergency into yield vault
+        if (retirement > 0 || emergency > 0) {
+            require(IERC20(usdcToken).approve(yieldVault, retirement + emergency), "USDC approval failed");
+        }
+
+        if (retirement > 0) {
+            uint256 shares = IERC4626(yieldVault).deposit(retirement, address(this));
+            acc.retirementShares += shares;
+        }
+
+        if (emergency > 0) {
+            uint256 shares = IERC4626(yieldVault).deposit(emergency, address(this));
+            acc.emergencyShares += shares;
+        }
 
         emit ContributionDeposited(member, health, retirement, emergency);
     }
@@ -151,19 +175,30 @@ contract MicroBenefitsVault {
             } else {
                 acc.healthInsuranceBalance -= amount;
             }
+            // Payout health claim from this contract's USDC
+            require(
+                IERC20(usdcToken).transfer(serviceProvider, amount),
+                "USDC transfer to provider failed"
+            );
         } else if (keccak256(abi.encodePacked(claimType)) == keccak256(abi.encodePacked("PENSION"))) {
-            require(acc.retirementBalance >= amount, "Insufficient pension balance");
-            acc.retirementBalance -= amount;
+            uint256 balanceVal = IERC4626(yieldVault).convertToAssets(acc.retirementShares);
+            require(balanceVal >= amount, "Insufficient pension balance");
+            uint256 shares = IERC4626(yieldVault).withdraw(amount, address(this), address(this));
+            acc.retirementShares -= shares;
+            require(
+                IERC20(usdcToken).transfer(serviceProvider, amount),
+                "USDC transfer to provider failed"
+            );
         } else {
-            require(acc.emergencyFundBalance >= amount, "Insufficient emergency balance");
-            acc.emergencyFundBalance -= amount;
+            uint256 balanceVal = IERC4626(yieldVault).convertToAssets(acc.emergencyShares);
+            require(balanceVal >= amount, "Insufficient emergency balance");
+            uint256 shares = IERC4626(yieldVault).withdraw(amount, address(this), address(this));
+            acc.emergencyShares -= shares;
+            require(
+                IERC20(usdcToken).transfer(serviceProvider, amount),
+                "USDC transfer to provider failed"
+            );
         }
-
-        // Payout to service provider or employee directly
-        require(
-            IERC20(usdcToken).transfer(serviceProvider, amount),
-            "USDC transfer to provider failed"
-        );
 
         emit ClaimPaid(member, serviceProvider, amount, claimType);
     }
