@@ -2,6 +2,10 @@
 export const STREAMING_PAYROLL_ADDRESS = '0xE366FC3cd96AFbDE41B0Fd8a3096178FaC2d1cDF';
 export const MICRO_BENEFITS_VAULT_ADDRESS = '0x712F4a25c5c02574B56B0b4F9F1b76960a9Ea5E6';
 export const USDC_TOKEN_ADDRESS = '0x3600000000000000000000000000000000000000';
+export const EURC_TOKEN_ADDRESS = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a';
+export const TREASURY_BUFFER_MANAGER_ADDRESS = '0x2C669865A152bE1260113cE77C1844b20E2Fce7F';
+export const PAYMASTER_RULES_MANAGER_ADDRESS = '0xB59a2285aE152be1260113ce77c1844B20e2Fce7F';
+
 
 export const USDC_ABI = [
   {
@@ -280,6 +284,113 @@ export const STREAMING_PAYROLL_ABI = [
     outputs: [{ name: '', type: 'string' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'streamId', type: 'bytes32' },
+      { name: 'fiat', type: 'string' }
+    ],
+    name: 'setStreamFiatPeg',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'bytes32' }],
+    name: 'fiatPegs',
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'string' }],
+    name: 'priceFeeds',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'fiat', type: 'string' },
+      { name: 'feed', type: 'address' }
+    ],
+    name: 'setPriceFeed',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'uint256' }],
+    name: 'proposals',
+    outputs: [
+      { name: 'actionType', type: 'string' },
+      { name: 'streamId', type: 'bytes32' },
+      { name: 'targetAddress', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'executed', type: 'bool' },
+      { name: 'confirmationCount', type: 'uint256' }
+    ],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: '', type: 'uint256' },
+      { name: '', type: 'address' }
+    ],
+    name: 'confirmations',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'proposalId', type: 'uint256' }],
+    name: 'confirmProposal',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'proposalId', type: 'uint256' }],
+    name: 'executeProposal',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'streamId', type: 'bytes32' }],
+    name: 'proposeCancelStream',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    name: 'proposeWithdrawLeftover',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'newOracle', type: 'address' }],
+    name: 'proposeSetPayrollOracle',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'getProposalsCount',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'address' }],
+    name: 'isMultiSigSigner',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
@@ -347,11 +458,19 @@ export const MICRO_BENEFITS_VAULT_ABI = [
   },
   {
     inputs: [
-      { name: 'member', type: 'address' },
-      { name: 'serviceProvider', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-      { name: 'claimType', type: 'string' },
-      { name: 'claimHash', type: 'bytes32' }
+      {
+        components: [
+          { name: 'member', type: 'address' },
+          { name: 'serviceProvider', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'claimType', type: 'string' },
+          { name: 'claimHash', type: 'bytes32' },
+          { name: 'nonce', type: 'uint256' }
+        ],
+        name: 'details',
+        type: 'tuple'
+      },
+      { name: 'signature', type: 'bytes' }
     ],
     name: 'processClaim',
     outputs: [],
@@ -493,5 +612,202 @@ export const CROSS_CHAIN_TREASURY_ABI = [
     type: 'function'
   }
 ];
+
+export const PASSKEY_ACCOUNT_FACTORY_ADDRESS = '0x8C090885148677Db1c982e75a937B9f60FE63690';
+export const PASSKEY_ACCOUNT_FACTORY_ABI = [
+  {
+    inputs: [
+      { name: 'credentialId', type: 'bytes32' },
+      { name: 'pubKeyX', type: 'uint256' },
+      { name: 'pubKeyY', type: 'uint256' }
+    ],
+    name: 'deployWallet',
+    outputs: [{ name: 'account', type: 'address' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'bytes32' }],
+    name: 'accountsByCredential',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'credentialId', type: 'bytes32' },
+      { name: 'pubKeyX', type: 'uint256' },
+      { name: 'pubKeyY', type: 'uint256' }
+    ],
+    name: 'getAddress',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
+
+export const NEXA_PAYMASTER_ADDRESS = '0xc3253F4d16Ae77Db1c982e75a937B9f60FE63690';
+export const NEXA_PAYMASTER_ABI = [
+  {
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    name: 'depositSponsor',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'address' }],
+    name: 'sponsorBalances',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'smartAccount', type: 'address' },
+      { name: 'target', type: 'address' },
+      { name: 'data', type: 'bytes' },
+      { name: 'streamId', type: 'bytes32' }
+    ],
+    name: 'sponsorWithdrawal',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+];
+
+export const PASSKEY_ACCOUNT_ABI = [
+  {
+    inputs: [],
+    name: 'nonce',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'credentialId',
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'target', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'data', type: 'bytes' },
+      { name: 'sigR', type: 'uint256' },
+      { name: 'sigS', type: 'uint256' }
+    ],
+    name: 'executeWithPasskey',
+    outputs: [{ name: '', type: 'bytes' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+];
+
+export const TREASURY_BUFFER_MANAGER_ABI = [
+  {
+    inputs: [{ name: 'employer', type: 'address' }],
+    name: 'employerBuffers',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'employer', type: 'address' }],
+    name: 'totalMonthlyCommitment',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'employer', type: 'address' }],
+    name: 'isWarningState',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'employer', type: 'address' }],
+    name: 'getDaysCovered',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    name: 'depositBuffer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    name: 'withdrawBuffer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'streamId', type: 'bytes32' },
+      { name: 'priority', type: 'uint256' }
+    ],
+    name: 'setStreamPriority',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'bytes32' }],
+    name: 'streamPriorities',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
+
+export const PAYMASTER_RULES_MANAGER_ABI = [
+  {
+    inputs: [
+      { name: 'worker', type: 'address' },
+      { name: 'maxTxPerMonth', type: 'uint256' },
+      { name: 'maxGasPrice', type: 'uint256' }
+    ],
+    name: 'setWorkerRule',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'worker', type: 'address' }],
+    name: 'resetMonthlyUsage',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'address' }],
+    name: 'workerRules',
+    outputs: [
+      { name: 'maxTxPerMonth', type: 'uint256' },
+      { name: 'maxGasPrice', type: 'uint256' },
+      { name: 'totalGasPaidUSDC', type: 'uint256' },
+      { name: 'txCountThisMonth', type: 'uint256' }
+    ],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'getConfiguredWorkers',
+    outputs: [{ name: '', type: 'address[]' }],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
+
+
 
 
