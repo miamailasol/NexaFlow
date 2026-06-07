@@ -230,6 +230,46 @@ export const STREAMING_PAYROLL_ABI = [
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'employee', type: 'address' },
+      { name: 'commitmentHash', type: 'bytes32' },
+      { name: 'totalCap', type: 'uint256' }
+    ],
+    name: 'createPrivateStream',
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'streamId', type: 'bytes32' },
+      { name: 'claimableAmount', type: 'uint256' },
+      { name: 'flowRate', type: 'uint256' },
+      { name: 'salt', type: 'bytes32' },
+      { name: 'signature', type: 'bytes' }
+    ],
+    name: 'withdrawPrivateFunds',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'bytes32' }],
+    name: 'privateStreams',
+    outputs: [
+      { name: 'employer', type: 'address' },
+      { name: 'employee', type: 'address' },
+      { name: 'commitmentHash', type: 'bytes32' },
+      { name: 'startTime', type: 'uint256' },
+      { name: 'lastUpdated', type: 'uint256' },
+      { name: 'accruedPaid', type: 'uint256' },
+      { name: 'totalCap', type: 'uint256' },
+      { name: 'isActive', type: 'bool' }
+    ],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
