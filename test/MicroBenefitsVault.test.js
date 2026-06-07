@@ -59,7 +59,7 @@ describe("MicroBenefitsVault with ERC-4626 Vault", function () {
         await tx.wait();
 
         const member = await microBenefitsVault.members(employee.address);
-        expect(member.healthInsuranceBalance).to.equal(healthAmt);
+        expect(member.healthInsuranceBalance).to.equal(healthAmt - (healthAmt * 20n / 100n));
         
         // Initial conversion multiplier is close to 1e18, so shares should be extremely close to assets
         expect(member.retirementShares).to.be.closeTo(pensionAmt, 10n);
@@ -106,18 +106,59 @@ describe("MicroBenefitsVault with ERC-4626 Vault", function () {
 
         const providerInitialUSDC = await mockUSDC.balanceOf(provider.address);
         
-        // Verifier processes a pension claim of 200 USDC
+        // Verifier signs a pension claim of 200 USDC
         const claimAmt = ethers.parseUnits("200", 6);
         const claimHash = ethers.id("some invoice details");
+        const nonce = 12345n;
 
-        const tx = await microBenefitsVault.connect(verifier).processClaim(
-            employee.address,
-            provider.address,
-            claimAmt,
-            "PENSION",
-            claimHash
+        const domain = {
+            name: "NexaFlow",
+            version: "1",
+            chainId: (await ethers.provider.getNetwork()).chainId,
+            verifyingContract: await microBenefitsVault.getAddress()
+        };
+
+        const types = {
+            ClaimDetails: [
+                { name: "member", type: "address" },
+                { name: "serviceProvider", type: "address" },
+                { name: "amount", type: "uint256" },
+                { name: "claimType", type: "string" },
+                { name: "claimHash", type: "bytes32" },
+                { name: "nonce", type: "uint256" }
+            ]
+        };
+
+        const details = {
+            member: employee.address,
+            serviceProvider: provider.address,
+            amount: claimAmt,
+            claimType: "PENSION",
+            claimHash: claimHash,
+            nonce: nonce
+        };
+
+        const signature = await verifier.signTypedData(domain, types, details);
+
+        // Process claim (can be submitted by anyone, e.g. employee)
+        const tx = await microBenefitsVault.connect(employee).processClaim(
+            details,
+            signature
         );
         await tx.wait();
+
+        // 1. Verify nonce reuse reverts
+        await expect(
+            microBenefitsVault.connect(employee).processClaim(details, signature)
+        ).to.be.revertedWith("Nonce already used");
+
+        // 2. Verify invalid signature signer reverts
+        const badDetails = { ...details, nonce: 99999n };
+        const badSignature = await employee.signTypedData(domain, types, badDetails);
+        await expect(
+            microBenefitsVault.connect(employee).processClaim(badDetails, badSignature)
+        ).to.be.revertedWith("Invalid claim signature");
+
 
         // Provider receives exactly 200 USDC
         const providerFinalUSDC = await mockUSDC.balanceOf(provider.address);
