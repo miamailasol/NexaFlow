@@ -181,6 +181,38 @@ export const STREAMING_PAYROLL_ABI = [
     outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'employees', type: 'address[]' },
+      { name: 'flowRates', type: 'uint256[]' },
+      { name: 'totalCaps', type: 'uint256[]' }
+    ],
+    name: 'createStreamsBatch',
+    outputs: [{ name: '', type: 'bytes32[]' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'streamIds', type: 'bytes32[]' }],
+    name: 'pauseStreamsBatch',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'streamIds', type: 'bytes32[]' }],
+    name: 'resumeStreamsBatch',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'streamIds', type: 'bytes32[]' }],
+    name: 'withdrawFundsBatch',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
   }
 ];
 
