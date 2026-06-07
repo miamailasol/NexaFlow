@@ -37,9 +37,10 @@ contract StreamingPayroll {
     mapping(bytes32 => Stream) public streams;
     mapping(address => bytes32[]) public employeeStreams;
     mapping(address => bytes32[]) public employerStreams;
-
+    mapping(address => uint256) public employerBalances;
 
     event StreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, uint256 flowRate, uint256 totalCap);
+    event DepositCredited(address indexed employer, uint256 amount);
     event StreamUpdated(bytes32 indexed streamId, uint256 newFlowRate);
     event StreamCancelled(bytes32 indexed streamId, uint256 remainingRefunded);
     event FundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
@@ -76,6 +77,21 @@ contract StreamingPayroll {
     }
 
     /**
+     * @notice Deposit USDC to credit an employer's payroll balance.
+     * @param employer The address of the employer to credit.
+     * @param amount The amount of USDC to deposit.
+     */
+    function creditEmployerBalance(address employer, uint256 amount) external {
+        require(amount > 0, "Amount must be positive");
+        require(
+            IERC20(usdcToken).transferFrom(msg.sender, address(this), amount),
+            "USDC deposit failed"
+        );
+        employerBalances[employer] += amount;
+        emit DepositCredited(employer, amount);
+    }
+
+    /**
      * @notice Create a streaming payroll for a remote engineer.
      * @param employee Remote worker address.
      * @param flowRate Amount of USDC (6 decimals) per second.
@@ -90,11 +106,17 @@ contract StreamingPayroll {
         require(flowRate > 0, "Flow rate must be positive");
         require(totalCap > 0, "Total cap must be positive");
 
-        // Lock total cap from employer into contract
-        require(
-            IERC20(usdcToken).transferFrom(msg.sender, address(this), totalCap),
-            "USDC deposit failed"
-        );
+        // Lock total cap from employer into contract, using deposited balance if available
+        if (employerBalances[msg.sender] >= totalCap) {
+            employerBalances[msg.sender] -= totalCap;
+        } else {
+            uint256 remaining = totalCap - employerBalances[msg.sender];
+            employerBalances[msg.sender] = 0;
+            require(
+                IERC20(usdcToken).transferFrom(msg.sender, address(this), remaining),
+                "USDC deposit failed"
+            );
+        }
 
         bytes32 streamId = keccak256(
             abi.encodePacked(msg.sender, employee, block.timestamp)
@@ -219,11 +241,17 @@ contract StreamingPayroll {
             aggregateCap += totalCaps[i];
         }
 
-        // Lock aggregate cap from employer into contract in a single transfer
-        require(
-            IERC20(usdcToken).transferFrom(msg.sender, address(this), aggregateCap),
-            "USDC batch deposit failed"
-        );
+        // Lock aggregate cap from employer into contract, using deposited balance if available
+        if (employerBalances[msg.sender] >= aggregateCap) {
+            employerBalances[msg.sender] -= aggregateCap;
+        } else {
+            uint256 remaining = aggregateCap - employerBalances[msg.sender];
+            employerBalances[msg.sender] = 0;
+            require(
+                IERC20(usdcToken).transferFrom(msg.sender, address(this), remaining),
+                "USDC batch deposit failed"
+            );
+        }
 
         bytes32[] memory streamIds = new bytes32[](employees.length);
 
