@@ -31,3 +31,4 @@ artifacts
 .env.staging
 .env.test
 .env.*
+scripts/dcw-store.json
