@@ -41,7 +41,7 @@ import {
   useDisconnect,
   useSwitchChain
 } from 'wagmi'
-import { formatUnits, parseUnits, createWalletClient, http, parseEventLogs, decodeAbiParameters, keccak256 } from 'viem'
+import { formatUnits, parseUnits, createWalletClient, http, parseEventLogs, decodeAbiParameters, keccak256, encodeAbiParameters } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { arcTestnet } from 'viem/chains'
 
@@ -282,32 +282,70 @@ function App() {
           }
 
           // Otherwise fetch from contract
-          const data = await publicClient.readContract({
+          let data = await publicClient.readContract({
             address: STREAMING_PAYROLL_ADDRESS,
             abi: STREAMING_PAYROLL_ABI,
             functionName: 'streams',
             args: [id]
           })
 
-          if (data && data[0] !== '0x0000000000000000000000000000000000000000') {
-            loaded.push({
-              id,
-              name: `Stream ${id.slice(0, 6)}`,
-              role: 'Remote Engineer',
-              location: 'Remote 🌐',
-              address: data[1],
-              flowRate: Number(formatUnits(data[2], 6)),
-              totalCap: Number(formatUnits(data[6], 6)),
-              accruedPaid: Number(formatUnits(data[5], 6)),
-              accruedLive: Number(formatUnits(data[5], 6)),
-              lastUpdated: Number(data[4]),
-              isActive: data[7],
-              healthPercent: 5,
-              retirementPercent: 5,
-              emergencyPercent: 5,
-              complianceStatus: 'Verified',
-              avatar: 'RE'
+          let isPrivate = false
+          if (!data || data[0] === '0x0000000000000000000000000000000000000000') {
+            const privateData = await publicClient.readContract({
+              address: STREAMING_PAYROLL_ADDRESS,
+              abi: STREAMING_PAYROLL_ABI,
+              functionName: 'privateStreams',
+              args: [id]
             })
+            if (privateData && privateData[0] !== '0x0000000000000000000000000000000000000000') {
+              data = privateData
+              isPrivate = true
+            }
+          }
+
+          if (data && data[0] !== '0x0000000000000000000000000000000000000000') {
+            if (isPrivate) {
+              const privateSecrets = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}')
+              const secret = privateSecrets[id]
+              loaded.push({
+                id,
+                name: secret ? secret.name : `Private Stream ${id.slice(0, 6)}`,
+                role: secret ? secret.role : 'Confidential Developer',
+                location: secret ? secret.location : 'Hidden 🔒',
+                address: data[1],
+                flowRate: secret ? Number(secret.flowRate) : 0,
+                totalCap: Number(formatUnits(data[6], 6)),
+                accruedPaid: Number(formatUnits(data[5], 6)),
+                accruedLive: Number(formatUnits(data[5], 6)),
+                lastUpdated: Number(data[4]),
+                isActive: data[7],
+                healthPercent: 5,
+                retirementPercent: 5,
+                emergencyPercent: 5,
+                complianceStatus: 'Verified',
+                avatar: 'PR',
+                isPrivate: true
+              })
+            } else {
+              loaded.push({
+                id,
+                name: `Stream ${id.slice(0, 6)}`,
+                role: 'Remote Engineer',
+                location: 'Remote 🌐',
+                address: data[1],
+                flowRate: Number(formatUnits(data[2], 6)),
+                totalCap: Number(formatUnits(data[6], 6)),
+                accruedPaid: Number(formatUnits(data[5], 6)),
+                accruedLive: Number(formatUnits(data[5], 6)),
+                lastUpdated: Number(data[4]),
+                isActive: data[7],
+                healthPercent: 5,
+                retirementPercent: 5,
+                emergencyPercent: 5,
+                complianceStatus: 'Verified',
+                avatar: 'RE'
+              })
+            }
           }
         } catch (err) {
           console.error('Error fetching stream', id, err)
@@ -328,6 +366,7 @@ function App() {
   const [newEmployeeAddress, setNewEmployeeAddress] = useState('')
   const [newEmployeeRate, setNewEmployeeRate] = useState(0.004)
   const [newEmployeeCap, setNewEmployeeCap] = useState(1000)
+  const [isPrivateMode, setIsPrivateMode] = useState(false)
 
   // Bulk Stream Onboarding and Checkboxes State
   const [bulkOnboardingType, setBulkOnboardingType] = useState('individual')
@@ -1035,48 +1074,112 @@ function App() {
       const flowRateRaw = parseUnits(newEmployeeRate.toString(), 6)
       const totalCapRaw = parseUnits(newEmployeeCap.toString(), 6)
 
-      triggerToast('Broadcasting Stream', 'Submitting createStream call to Arc Testnet...')
+      let hash
+      let streamId
+      let isPrivate = isPrivateMode
 
-      const hash = await writeContractAsync({
-        address: STREAMING_PAYROLL_ADDRESS,
-        abi: STREAMING_PAYROLL_ABI,
-        functionName: 'createStream',
-        args: [newEmployeeAddress, flowRateRaw, totalCapRaw]
-      })
+      if (isPrivate) {
+        // Generate random 32-byte salt locally
+        const saltBytes = new Uint8Array(32)
+        crypto.getRandomValues(saltBytes)
+        const salt = '0x' + Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('')
 
-      triggerToast('Transaction Submitted', 'Waiting for sub-second block finalization on Arc...')
+        // Calculate commitmentHash locally using viem
+        const commitmentHash = keccak256(encodeAbiParameters(
+          [{ type: 'uint256' }, { type: 'uint256' }, { type: 'bytes32' }],
+          [flowRateRaw, totalCapRaw, salt]
+        ))
 
-      // Wait for real transaction confirmation
-      const receipt = await publicClient.waitForTransactionReceipt({ hash })
+        triggerToast('Broadcasting Private Stream', 'Submitting createPrivateStream call to Arc Testnet...')
 
-      // Safe extraction of streamId
-      let streamId;
-      try {
-        const logs = parseEventLogs({
+        hash = await writeContractAsync({
+          address: STREAMING_PAYROLL_ADDRESS,
           abi: STREAMING_PAYROLL_ABI,
-          eventName: 'StreamCreated',
-          logs: receipt.logs
+          functionName: 'createPrivateStream',
+          args: [newEmployeeAddress, commitmentHash, totalCapRaw]
         })
-        if (logs && logs.length > 0 && logs[0].args && logs[0].args.streamId) {
-          streamId = logs[0].args.streamId
-        }
-      } catch (e) {
-        console.warn("parseEventLogs failed", e)
-      }
 
-      // Robust fallback 1: Extract topics[1] from the logs emitted by StreamingPayroll address
-      if (!streamId && receipt.logs && receipt.logs.length > 0) {
-        const payrollLog = receipt.logs.find(
-          log => log.address.toLowerCase() === STREAMING_PAYROLL_ADDRESS.toLowerCase() && log.topics && log.topics.length > 1
-        )
-        if (payrollLog) {
-          streamId = payrollLog.topics[1]
-        }
-      }
+        triggerToast('Transaction Submitted', 'Waiting for private stream finalization on Arc...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash })
 
-      // Robust fallback 2: Deterministic generation
-      if (!streamId) {
-        streamId = ('0x' + Math.random().toString(16).substr(2, 64)).padEnd(66, '0')
+        // Extract private streamId
+        try {
+          const logs = parseEventLogs({
+            abi: STREAMING_PAYROLL_ABI,
+            eventName: 'PrivateStreamCreated',
+            logs: receipt.logs
+          })
+          if (logs && logs.length > 0 && logs[0].args && logs[0].args.streamId) {
+            streamId = logs[0].args.streamId
+          }
+        } catch (e) {
+          console.warn("parsePrivateStreamCreated failed", e)
+        }
+
+        if (!streamId && receipt.logs && receipt.logs.length > 0) {
+          const payrollLog = receipt.logs.find(
+            log => log.address.toLowerCase() === STREAMING_PAYROLL_ADDRESS.toLowerCase() && log.topics && log.topics.length > 1
+          )
+          if (payrollLog) {
+            streamId = payrollLog.topics[1]
+          }
+        }
+
+        if (!streamId) {
+          streamId = ('0x' + Math.random().toString(16).substr(2, 64)).padEnd(66, '0')
+        }
+
+        // Save salt, flowRate, cap, name, and role to local storage
+        const privateStoreData = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}')
+        privateStoreData[streamId] = {
+          salt,
+          flowRate: newEmployeeRate.toString(),
+          totalCap: newEmployeeCap.toString(),
+          name: newEmployeeName,
+          role: newEmployeeRole || 'Developer',
+          location: newEmployeeLoc,
+          address: newEmployeeAddress,
+          employer: address
+        }
+        localStorage.setItem('nexaflow_private_stream_secrets', JSON.stringify(privateStoreData))
+      } else {
+        triggerToast('Broadcasting Stream', 'Submitting createStream call to Arc Testnet...')
+
+        hash = await writeContractAsync({
+          address: STREAMING_PAYROLL_ADDRESS,
+          abi: STREAMING_PAYROLL_ABI,
+          functionName: 'createStream',
+          args: [newEmployeeAddress, flowRateRaw, totalCapRaw]
+        })
+
+        triggerToast('Transaction Submitted', 'Waiting for sub-second block finalization on Arc...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash })
+
+        try {
+          const logs = parseEventLogs({
+            abi: STREAMING_PAYROLL_ABI,
+            eventName: 'StreamCreated',
+            logs: receipt.logs
+          })
+          if (logs && logs.length > 0 && logs[0].args && logs[0].args.streamId) {
+            streamId = logs[0].args.streamId
+          }
+        } catch (e) {
+          console.warn("parseEventLogs failed", e)
+        }
+
+        if (!streamId && receipt.logs && receipt.logs.length > 0) {
+          const payrollLog = receipt.logs.find(
+            log => log.address.toLowerCase() === STREAMING_PAYROLL_ADDRESS.toLowerCase() && log.topics && log.topics.length > 1
+          )
+          if (payrollLog) {
+            streamId = payrollLog.topics[1]
+          }
+        }
+
+        if (!streamId) {
+          streamId = ('0x' + Math.random().toString(16).substr(2, 64)).padEnd(66, '0')
+        }
       }
 
       // Safe reading of on-chain parameters
@@ -1085,7 +1188,7 @@ function App() {
         streamData = await publicClient.readContract({
           address: STREAMING_PAYROLL_ADDRESS,
           abi: STREAMING_PAYROLL_ABI,
-          functionName: 'streams',
+          functionName: isPrivate ? 'privateStreams' : 'streams',
           args: [streamId]
         })
       } catch (err) {
@@ -1102,7 +1205,7 @@ function App() {
         role: newEmployeeRole || 'Developer',
         location: newEmployeeLoc,
         address: streamData ? streamData[1] : newEmployeeAddress,
-        flowRate: streamData ? Number(formatUnits(streamData[2], 6)) : Number(newEmployeeRate),
+        flowRate: isPrivate ? Number(newEmployeeRate) : (streamData ? Number(formatUnits(streamData[2], 6)) : Number(newEmployeeRate)),
         totalCap: streamData ? Number(formatUnits(streamData[6], 6)) : Number(newEmployeeCap),
         accruedPaid: streamData ? Number(formatUnits(streamData[5], 6)) : 0,
         accruedLive: streamData ? Number(formatUnits(streamData[5], 6)) : 0,
@@ -1112,7 +1215,8 @@ function App() {
         retirementPercent: 5,
         emergencyPercent: 5,
         complianceStatus: 'Verified',
-        avatar: newEmployeeName.split(' ').map((n) => n[0]).join('').toUpperCase().substr(0, 2)
+        avatar: newEmployeeName.split(' ').map((n) => n[0]).join('').toUpperCase().substr(0, 2),
+        isPrivate
       }
 
       setEmployees((prev) => [newEmp, ...prev])
@@ -1441,6 +1545,22 @@ function App() {
     }
   };
 
+  const signOracleMessage = async (streamId, claimableAmount) => {
+    const privateKey = import.meta.env.VITE_PRIVATE_KEY
+    if (!privateKey) {
+      throw new Error('VITE_PRIVATE_KEY missing in environmental variables')
+    }
+    const oracleAccount = privateKeyToAccount(privateKey)
+    const msgHash = keccak256(encodeAbiParameters(
+      [{ type: 'bytes32' }, { type: 'uint256' }],
+      [streamId, claimableAmount]
+    ))
+    const signature = await oracleAccount.signMessage({
+      message: { raw: msgHash }
+    })
+    return signature
+  }
+
   // Handle stream withdrawal (on-chain claim)
   const handleWithdrawal = async (streamIdObj) => {
     if (!isConnected) {
@@ -1452,21 +1572,58 @@ function App() {
     if (!emp) return
 
     try {
-      triggerToast('Withdrawing Wages', `Calling withdrawFunds for stream on Arc Chain...`)
+      let hash
+      let claimedVal
 
-      const hash = await writeContractAsync({
-        address: STREAMING_PAYROLL_ADDRESS,
-        abi: STREAMING_PAYROLL_ABI,
-        functionName: 'withdrawFunds',
-        args: [streamIdObj]
-      })
+      if (emp.isPrivate) {
+        triggerToast('Withdrawing Wages', 'Requesting oracle signature for private claim...')
+        
+        // Retrieve private parameters from local storage
+        const privateSecrets = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}')
+        const secret = privateSecrets[streamIdObj]
+        if (!secret) {
+          throw new Error('Private stream parameters not found locally.')
+        }
 
-      triggerToast('Transaction Submitted', 'Settling wages on-chain...')
+        const flowRateRaw = parseUnits(secret.flowRate, 6)
+        const salt = secret.salt
+        
+        // Compute claimable amount in USDC (6 decimals)
+        const claimableAmountRaw = parseUnits(emp.accruedLive.toFixed(6), 6)
 
-      // Wait for real-time confirmation
-      await publicClient.waitForTransactionReceipt({ hash })
+        // Get oracle signature
+        const signature = await signOracleMessage(streamIdObj, claimableAmountRaw)
 
-      const claimedVal = emp.accruedLive - emp.accruedPaid
+        triggerToast('Wages Authenticated', 'Submitting private claim transaction to Arc...')
+
+        hash = await writeContractAsync({
+          address: STREAMING_PAYROLL_ADDRESS,
+          abi: STREAMING_PAYROLL_ABI,
+          functionName: 'withdrawPrivateFunds',
+          args: [streamIdObj, claimableAmountRaw, flowRateRaw, salt, signature]
+        })
+
+        triggerToast('Transaction Submitted', 'Settling private wages on-chain...')
+        await publicClient.waitForTransactionReceipt({ hash })
+
+        claimedVal = emp.accruedLive - emp.accruedPaid
+      } else {
+        triggerToast('Withdrawing Wages', `Calling withdrawFunds for stream on Arc Chain...`)
+
+        hash = await writeContractAsync({
+          address: STREAMING_PAYROLL_ADDRESS,
+          abi: STREAMING_PAYROLL_ABI,
+          functionName: 'withdrawFunds',
+          args: [streamIdObj]
+        })
+
+        triggerToast('Transaction Submitted', 'Settling wages on-chain...')
+
+        // Wait for real-time confirmation
+        await publicClient.waitForTransactionReceipt({ hash })
+
+        claimedVal = emp.accruedLive - emp.accruedPaid
+      }
 
       refetchUsdc()
       refetchMemberAccount()
@@ -1486,7 +1643,7 @@ function App() {
 
       const newTx = {
         id: Date.now(),
-        type: 'Wages Settled',
+        type: emp.isPrivate ? 'Private Wages Claimed' : 'Wages Settled',
         engineer: emp.name,
         amount: `${claimedVal.toFixed(4)} USDC`,
         txHash: hash.slice(0, 8) + '...' + hash.slice(-4),
@@ -2312,7 +2469,25 @@ function App() {
                         <div className="stream-info">
                           <div className="avatar">{emp.avatar}</div>
                           <div className="engineer-details">
-                            <h4>{emp.name}</h4>
+                            <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {emp.name}
+                              {emp.isPrivate && (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontSize: '9px',
+                                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                                  color: '#A78BFA',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                                  fontWeight: 'normal'
+                                }}>
+                                  Private
+                                </span>
+                              )}
+                            </h4>
                             <p>{emp.role}</p>
                           </div>
                         </div>
@@ -2323,7 +2498,7 @@ function App() {
                           {emp.accruedLive.toFixed(5)} USDC
                         </div>
                         <span className="stream-flow-details">
-                          Velocity: {emp.flowRate.toFixed(4)} USDC/s (~${(emp.flowRate * 3600).toFixed(2)}/hr)
+                          Velocity: {emp.isPrivate ? 'Masked 🔒' : `Velocity: ${emp.flowRate.toFixed(4)} USDC/s (~$${(emp.flowRate * 3600).toFixed(2)}/hr)`}
                         </span>
                       </div>
                       <div className="stream-card-section stream-card-progress">
@@ -2566,6 +2741,25 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="form-group form-privacy" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'rgba(255, 255, 255, 0.02)', marginBottom: '16px' }}>
+                    <input
+                      type="checkbox"
+                      id="privacy-mode-toggle"
+                      checked={isPrivateMode}
+                      onChange={(e) => setIsPrivateMode(e.target.checked)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-secondary)' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label htmlFor="privacy-mode-toggle" style={{ fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <ShieldCheck size={16} color="var(--color-secondary)" />
+                        Enable Cryptographic Privacy Mode
+                      </label>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Masks flow velocity and limits on-chain using a commitment hash commitment.
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="form-actions-wrapper">
                     {/* Action Preview */}
                     <div className="action-preview-card">
@@ -2575,7 +2769,11 @@ function App() {
                       </div>
                       <ul className="action-preview-list">
                         <li>You lock <strong>{newEmployeeCap || '0'} USDC</strong> in a secure automated pay safe.</li>
-                        <li>Continuous second-by-second payouts will activate instantly for <strong>{newEmployeeName || 'Recipient'}</strong>.</li>
+                        {isPrivateMode ? (
+                          <li>Continuous payouts are masked. Flow rate is hidden behind a secure hash commitment.</li>
+                        ) : (
+                          <li>Continuous second-by-second payouts will activate instantly for <strong>{newEmployeeName || 'Recipient'}</strong>.</li>
+                        )}
                         <li>You retain full power to pause or close the channel to retrieve unspent funds.</li>
                       </ul>
                     </div>
@@ -2797,7 +2995,25 @@ function App() {
                     <div className="stream-card-section stream-card-info" style={{ width: '22%' }}>
                       <div className="avatar">{emp.avatar}</div>
                       <div className="engineer-details">
-                        <h4>{emp.name}</h4>
+                        <h4 style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          {emp.name}
+                          {emp.isPrivate && (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              fontSize: '9px',
+                              backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                              color: '#A78BFA',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(139, 92, 246, 0.3)',
+                              fontWeight: 'normal'
+                            }}>
+                              <ShieldCheck size={10} /> Private
+                            </span>
+                          )}
+                        </h4>
                         <p>{emp.role}</p>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.location}</span>
                       </div>
@@ -2816,7 +3032,7 @@ function App() {
                         {emp.accruedLive.toFixed(5)} USDC
                       </div>
                       <span className="stream-flow-details">
-                        Velocity: {emp.flowRate.toFixed(4)} USDC/s
+                        Velocity: {emp.isPrivate ? 'Masked 🔒' : `${emp.flowRate.toFixed(4)} USDC/s`}
                       </span>
                     </div>
 
