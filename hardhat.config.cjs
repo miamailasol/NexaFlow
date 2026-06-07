@@ -14,6 +14,9 @@ module.exports = {
     },
   },
   networks: {
+    hardhat: {
+      allowUnlimitedContractSize: true,
+    },
     arcTestnet: {
       url: "https://rpc.testnet.arc.network",
       chainId: 5042002,

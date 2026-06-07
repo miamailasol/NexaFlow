@@ -11,10 +11,57 @@ interface IERC20 {
     function transferFrom(address from, address to, uint256 value) external returns (bool);
     function balanceOf(address account) external view returns (uint256);
     function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 value) external returns (bool);
 }
 
 interface ICompliance {
     function isSanctioned(address target) external view returns (bool);
+}
+
+interface ITreasuryBufferManager {
+    function canCreateStream(address employer) external view returns (bool);
+    function canClaimStream(bytes32 streamId) external view returns (bool);
+    function recordStreamCommitment(address employer, bytes32 streamId, uint256 flowRate) external;
+    function removeStreamCommitment(address employer, bytes32 streamId) external;
+}
+
+interface IMicroBenefitsVault {
+    function notifyCoopFee(uint256 amount) external;
+}
+
+struct ExactInputSingleParams {
+    address tokenIn;
+    address tokenOut;
+    uint24 fee;
+    address recipient;
+    uint256 deadline;
+    uint256 amountIn;
+    uint256 amountOutMinimum;
+    uint160 sqrtPriceLimitX96;
+}
+
+interface ISwapRouter {
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
+
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function description() external view returns (string memory);
+    function version() external view returns (uint256);
+    function getRoundData(uint80 _roundId) external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
 }
 
 contract StreamingPayroll {
@@ -45,16 +92,46 @@ contract StreamingPayroll {
     address public owner;
     address public complianceRegistry;
     address public payrollOracle;
+    address public benefitsVault;
+    address public eurcToken;
+    address public swapRouter;
+    address public treasuryBufferManager;
 
     mapping(bytes32 => Stream) public streams;
     mapping(bytes32 => PrivateStreamCommitment) public privateStreams;
     mapping(address => bytes32[]) public employeeStreams;
     mapping(address => bytes32[]) public employerStreams;
     mapping(address => uint256) public employerBalances;
+    mapping(bytes32 => address) public targetPayoutTokens;
 
     mapping(string => uint256) public taxRates; // basis points (e.g. 1500 = 15%)
     mapping(string => address) public taxAuthorities; // government wallet addresses
     mapping(bytes32 => string) public streamCountries;
+
+    mapping(bytes32 => string) public fiatPegs; // e.g. "SGD", "BRL", "NGN"
+    mapping(string => address) public priceFeeds; // e.g. "SGD" => SGD/USD Aggregator address
+
+    // Multi-Sig Configuration
+    address[] public multiSigSigners;
+    uint256 public requiredConfirmations;
+    mapping(address => bool) public isMultiSigSigner;
+
+    struct Proposal {
+        string actionType; // "CANCEL_STREAM", "WITHDRAW_TREASURY", "SET_ORACLE"
+        bytes32 streamId;
+        address targetAddress;
+        uint256 amount;
+        bool executed;
+        uint256 confirmationCount;
+    }
+
+    Proposal[] public proposals;
+    // proposalId => signer => confirmed
+    mapping(uint256 => mapping(address => bool)) public confirmations;
+
+    event ProposalCreated(uint256 indexed proposalId, string actionType, uint256 amount);
+    event ProposalConfirmed(uint256 indexed proposalId, address indexed signer);
+    event ProposalExecuted(uint256 indexed proposalId);
 
     event StreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, uint256 flowRate, uint256 totalCap);
     event DepositCredited(address indexed employer, uint256 amount);
@@ -63,6 +140,10 @@ contract StreamingPayroll {
     event FundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
     event PrivateStreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, bytes32 commitmentHash, uint256 totalCap);
     event PrivateFundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
+    event TargetPayoutTokenUpdated(bytes32 indexed streamId, address indexed token);
+    event FiatPegUpdated(bytes32 indexed streamId, string fiatPeg);
+    event PriceFeedUpdated(string fiatCurrency, address oracleAddress);
+    event TreasuryBufferManagerUpdated(address indexed bufferManager);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -91,6 +172,8 @@ contract StreamingPayroll {
         owner = msg.sender;
         payrollOracle = msg.sender;
 
+        eurcToken = 0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a;
+
         taxRates["SG"] = 0;
         taxAuthorities["SG"] = address(0);
 
@@ -102,15 +185,70 @@ contract StreamingPayroll {
 
         taxRates["TW"] = 1800;
         taxAuthorities["TW"] = 0x8b30000000000000000000000000000000000000;
+
+        // Default Multi-Sig Configuration
+        multiSigSigners.push(msg.sender);
+        multiSigSigners.push(0x9e71a3371987d6f26D8251E18a8FdcB59296556e);
+        multiSigSigners.push(0x7a30000000000000000000000000000000000000);
+        isMultiSigSigner[msg.sender] = true;
+        isMultiSigSigner[0x9e71a3371987d6f26D8251E18a8FdcB59296556e] = true;
+        isMultiSigSigner[0x7a30000000000000000000000000000000000000] = true;
+        requiredConfirmations = 2;
     }
 
     function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
         complianceRegistry = _complianceRegistry;
     }
 
+    function setEurcToken(address _eurcToken) external onlyOwner {
+        eurcToken = _eurcToken;
+    }
+
+    function setSwapRouter(address _swapRouter) external onlyOwner {
+        swapRouter = _swapRouter;
+    }
+
+    function setTreasuryBufferManager(address _treasuryBufferManager) external onlyOwner {
+        treasuryBufferManager = _treasuryBufferManager;
+        emit TreasuryBufferManagerUpdated(_treasuryBufferManager);
+    }
+
+    function setTargetPayoutToken(bytes32 streamId, address token) external onlyCleared(msg.sender) {
+        require(
+            streams[streamId].employee == msg.sender || 
+            privateStreams[streamId].employee == msg.sender ||
+            streams[streamId].employer == msg.sender ||
+            privateStreams[streamId].employer == msg.sender,
+            "Only stream participant"
+        );
+        require(token == address(0) || token == usdcToken || token == eurcToken, "Unsupported target token");
+        targetPayoutTokens[streamId] = token;
+        emit TargetPayoutTokenUpdated(streamId, token);
+    }
+
     function setTaxRate(string calldata country, uint256 rate, address authority) external onlyOwner {
         taxRates[country] = rate;
         taxAuthorities[country] = authority;
+    }
+
+    function setPriceFeed(string calldata fiat, address feed) external onlyOwner {
+        priceFeeds[fiat] = feed;
+        emit PriceFeedUpdated(fiat, feed);
+    }
+
+    function setStreamFiatPeg(bytes32 streamId, string calldata fiat) external onlyCleared(msg.sender) {
+        require(
+            streams[streamId].employee == msg.sender || 
+            privateStreams[streamId].employee == msg.sender ||
+            streams[streamId].employer == msg.sender ||
+            privateStreams[streamId].employer == msg.sender,
+            "Only stream participant"
+        );
+        if (bytes(fiat).length > 0) {
+            require(priceFeeds[fiat] != address(0), "Unsupported fiat currency feed");
+        }
+        fiatPegs[streamId] = fiat;
+        emit FiatPegUpdated(streamId, fiat);
     }
 
     /**
@@ -141,6 +279,13 @@ contract StreamingPayroll {
         uint256 totalCap,
         string memory country
     ) public onlyCleared(employee) returns (bytes32) {
+        if (treasuryBufferManager != address(0)) {
+            require(
+                ITreasuryBufferManager(treasuryBufferManager).canCreateStream(msg.sender),
+                "BufferManager: Warning state - stream creation restricted"
+            );
+        }
+
         require(employee != address(0), "Invalid employee address");
         require(flowRate > 0, "Flow rate must be positive");
         require(totalCap > 0, "Total cap must be positive");
@@ -177,6 +322,10 @@ contract StreamingPayroll {
         employeeStreams[employee].push(streamId);
         employerStreams[msg.sender].push(streamId);
 
+        if (treasuryBufferManager != address(0)) {
+            ITreasuryBufferManager(treasuryBufferManager).recordStreamCommitment(msg.sender, streamId, flowRate);
+        }
+
         emit StreamCreated(streamId, msg.sender, employee, flowRate, totalCap);
         return streamId;
     }
@@ -200,7 +349,16 @@ contract StreamingPayroll {
         if (!stream.isActive) return 0;
 
         uint256 duration = block.timestamp - stream.lastUpdated;
-        uint256 accrued = duration * stream.flowRate;
+        uint256 accrued;
+
+        string memory fiat = fiatPegs[streamId];
+        if (bytes(fiat).length > 0 && priceFeeds[fiat] != address(0)) {
+            (, int256 price, , , ) = AggregatorV3Interface(priceFeeds[fiat]).latestRoundData();
+            require(price > 0, "Invalid oracle price");
+            accrued = (duration * stream.flowRate * 10**8) / uint256(price);
+        } else {
+            accrued = duration * stream.flowRate;
+        }
 
         // Ensure we don't exceed the capped amount
         uint256 remaining = stream.totalCap - stream.accruedPaid;
@@ -214,6 +372,13 @@ contract StreamingPayroll {
      * @notice Withdraw available USDC stream funds.
      */
     function withdrawFunds(bytes32 streamId) public onlyStreamEmployee(streamId) onlyCleared(streams[streamId].employee) {
+        if (treasuryBufferManager != address(0)) {
+            require(
+                ITreasuryBufferManager(treasuryBufferManager).canClaimStream(streamId),
+                "BufferManager: Stream claims restricted - priority roles first"
+            );
+        }
+
         Stream storage stream = streams[streamId];
         require(stream.isActive, "Stream is not active");
 
@@ -226,7 +391,12 @@ contract StreamingPayroll {
         // If payroll fully completed, mark inactive
         if (stream.accruedPaid >= stream.totalCap) {
             stream.isActive = false;
+            if (treasuryBufferManager != address(0)) {
+                ITreasuryBufferManager(treasuryBufferManager).removeStreamCommitment(stream.employer, streamId);
+            }
         }
+
+        uint256 coopFee = _routeCoopFee(claimable);
 
         // Calculate tax withholding split
         string memory country = streamCountries[streamId];
@@ -234,11 +404,11 @@ contract StreamingPayroll {
         address taxAuthority = taxAuthorities[country];
 
         uint256 taxAmount = 0;
-        uint256 employeeAmount = claimable;
+        uint256 employeeAmount = claimable - coopFee;
 
         if (taxRate > 0 && taxAuthority != address(0)) {
             taxAmount = (claimable * taxRate) / 10000;
-            employeeAmount = claimable - taxAmount;
+            employeeAmount = claimable - taxAmount - coopFee;
         }
 
         if (taxAmount > 0) {
@@ -248,10 +418,30 @@ contract StreamingPayroll {
             );
         }
 
-        require(
-            IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-            "USDC transfer to employee failed"
-        );
+        address targetToken = targetPayoutTokens[streamId];
+        if (targetToken != address(0) && targetToken != usdcToken) {
+            require(swapRouter != address(0), "Swap router not set");
+            require(
+                IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                "USDC approval to router failed"
+            );
+            ExactInputSingleParams memory params = ExactInputSingleParams({
+                tokenIn: usdcToken,
+                tokenOut: targetToken,
+                fee: 3000,
+                recipient: stream.employee,
+                deadline: block.timestamp + 300,
+                amountIn: employeeAmount,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+            ISwapRouter(swapRouter).exactInputSingle(params);
+        } else {
+            require(
+                IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                "USDC transfer to employee failed"
+            );
+        }
 
         emit FundsWithdrawn(streamId, stream.employee, claimable);
     }
@@ -260,6 +450,14 @@ contract StreamingPayroll {
      * @notice Cancel stream by employer, refunding the remaining unspent escrow.
      */
     function cancelStream(bytes32 streamId) external onlyStreamEmployer(streamId) {
+        Stream storage stream = streams[streamId];
+        if (stream.totalCap >= 10000 * 10**6) {
+            revert("High-value stream requires multi-sig proposal");
+        }
+        _executeCancelStream(streamId);
+    }
+
+    function _executeCancelStream(bytes32 streamId) internal {
         Stream storage stream = streams[streamId];
         require(stream.isActive, "Stream already inactive");
 
@@ -271,12 +469,38 @@ contract StreamingPayroll {
         stream.accruedPaid = spent;
         stream.isActive = false;
 
+        if (treasuryBufferManager != address(0)) {
+            ITreasuryBufferManager(treasuryBufferManager).removeStreamCommitment(stream.employer, streamId);
+        }
+
         // Send accrued to employee
         if (claimable > 0) {
-            require(
-                IERC20(usdcToken).transfer(stream.employee, claimable),
-                "USDC transfer to employee failed"
-            );
+            uint256 coopFee = _routeCoopFee(claimable);
+            uint256 employeeAmount = claimable - coopFee;
+            address targetToken = targetPayoutTokens[streamId];
+            if (targetToken != address(0) && targetToken != usdcToken) {
+                require(swapRouter != address(0), "Swap router not set");
+                require(
+                    IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                    "USDC approval to router failed"
+                );
+                ExactInputSingleParams memory params = ExactInputSingleParams({
+                    tokenIn: usdcToken,
+                    tokenOut: targetToken,
+                    fee: 3000,
+                    recipient: stream.employee,
+                    deadline: block.timestamp + 300,
+                    amountIn: employeeAmount,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                });
+                ISwapRouter(swapRouter).exactInputSingle(params);
+            } else {
+                require(
+                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                    "USDC transfer to employee failed"
+                );
+            }
             emit FundsWithdrawn(streamId, stream.employee, claimable);
         }
 
@@ -289,6 +513,131 @@ contract StreamingPayroll {
         }
 
         emit StreamCancelled(streamId, unspent);
+    }
+
+    // Multi-Sig Operational Functions
+    function proposeCancelStream(bytes32 streamId) external onlyCleared(msg.sender) returns (uint256) {
+        require(streams[streamId].employer == msg.sender, "Only stream employer can propose");
+        require(streams[streamId].isActive, "Stream already inactive");
+        
+        uint256 proposalId = proposals.length;
+        proposals.push(Proposal({
+            actionType: "CANCEL_STREAM",
+            streamId: streamId,
+            targetAddress: msg.sender,
+            amount: streams[streamId].totalCap,
+            executed: false,
+            confirmationCount: 0
+        }));
+
+        emit ProposalCreated(proposalId, "CANCEL_STREAM", streams[streamId].totalCap);
+        
+        if (isMultiSigSigner[msg.sender]) {
+            _confirmProposal(proposalId, msg.sender);
+        }
+        
+        return proposalId;
+    }
+
+    function proposeWithdrawLeftover(uint256 amount) external onlyCleared(msg.sender) returns (uint256) {
+        require(employerBalances[msg.sender] >= amount, "Insufficient employer balance");
+        
+        uint256 proposalId = proposals.length;
+        proposals.push(Proposal({
+            actionType: "WITHDRAW_TREASURY",
+            streamId: bytes32(0),
+            targetAddress: msg.sender,
+            amount: amount,
+            executed: false,
+            confirmationCount: 0
+        }));
+
+        emit ProposalCreated(proposalId, "WITHDRAW_TREASURY", amount);
+
+        if (isMultiSigSigner[msg.sender]) {
+            _confirmProposal(proposalId, msg.sender);
+        }
+
+        return proposalId;
+    }
+
+    function proposeSetPayrollOracle(address newOracle) external onlyOwner returns (uint256) {
+        uint256 proposalId = proposals.length;
+        proposals.push(Proposal({
+            actionType: "SET_ORACLE",
+            streamId: bytes32(0),
+            targetAddress: newOracle,
+            amount: 0,
+            executed: false,
+            confirmationCount: 0
+        }));
+
+        emit ProposalCreated(proposalId, "SET_ORACLE", 0);
+
+        if (isMultiSigSigner[msg.sender]) {
+            _confirmProposal(proposalId, msg.sender);
+        }
+
+        return proposalId;
+    }
+
+    function confirmProposal(uint256 proposalId) external {
+        require(isMultiSigSigner[msg.sender], "Not an authorized signer");
+        require(proposalId < proposals.length, "Invalid proposal ID");
+        require(!proposals[proposalId].executed, "Proposal already executed");
+        require(!confirmations[proposalId][msg.sender], "Already confirmed");
+
+        _confirmProposal(proposalId, msg.sender);
+    }
+
+    function _confirmProposal(uint256 proposalId, address signer) internal {
+        confirmations[proposalId][signer] = true;
+        proposals[proposalId].confirmationCount++;
+        emit ProposalConfirmed(proposalId, signer);
+    }
+
+    function executeProposal(uint256 proposalId) external {
+        require(proposalId < proposals.length, "Invalid proposal ID");
+        Proposal storage prop = proposals[proposalId];
+        require(!prop.executed, "Proposal already executed");
+        require(prop.confirmationCount >= requiredConfirmations, "Insufficient confirmations");
+
+        prop.executed = true;
+
+        if (keccak256(bytes(prop.actionType)) == keccak256(bytes("CANCEL_STREAM"))) {
+            _executeCancelStream(prop.streamId);
+        } else if (keccak256(bytes(prop.actionType)) == keccak256(bytes("WITHDRAW_TREASURY"))) {
+            require(employerBalances[prop.targetAddress] >= prop.amount, "Insufficient employer balance");
+            employerBalances[prop.targetAddress] -= prop.amount;
+            require(
+                IERC20(usdcToken).transfer(prop.targetAddress, prop.amount),
+                "USDC transfer failed"
+            );
+        } else if (keccak256(bytes(prop.actionType)) == keccak256(bytes("SET_ORACLE"))) {
+            payrollOracle = prop.targetAddress;
+        }
+
+        emit ProposalExecuted(proposalId);
+    }
+
+    function setMultiSigSigners(address[] calldata signers, uint256 required) external onlyOwner {
+        require(signers.length > 0, "No signers provided");
+        require(required > 0 && required <= signers.length, "Invalid required confirmations");
+        
+        for (uint256 i = 0; i < multiSigSigners.length; i++) {
+            isMultiSigSigner[multiSigSigners[i]] = false;
+        }
+        
+        multiSigSigners = signers;
+        requiredConfirmations = required;
+        
+        for (uint256 i = 0; i < signers.length; i++) {
+            isMultiSigSigner[signers[i]] = true;
+        }
+    }
+
+    function getProposalsCount() external view returns (uint256) {
+        return proposals.length;
     }
 
     /**
@@ -406,19 +755,25 @@ contract StreamingPayroll {
             stream.lastUpdated = block.timestamp;
             stream.isActive = false;
 
+            if (treasuryBufferManager != address(0)) {
+                ITreasuryBufferManager(treasuryBufferManager).removeStreamCommitment(stream.employer, streamId);
+            }
+
             if (claimable > 0) {
                 stream.accruedPaid += claimable;
+
+                uint256 coopFee = _routeCoopFee(claimable);
 
                 string memory country = streamCountries[streamId];
                 uint256 taxRate = taxRates[country];
                 address taxAuthority = taxAuthorities[country];
 
                 uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable;
+                uint256 employeeAmount = claimable - coopFee;
 
                 if (taxRate > 0 && taxAuthority != address(0)) {
                     taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount;
+                    employeeAmount = claimable - taxAmount - coopFee;
                 }
 
                 if (taxAmount > 0) {
@@ -428,10 +783,30 @@ contract StreamingPayroll {
                     );
                 }
 
-                require(
-                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                    "USDC transfer to employee failed"
-                );
+                address targetToken = targetPayoutTokens[streamId];
+                if (targetToken != address(0) && targetToken != usdcToken) {
+                    require(swapRouter != address(0), "Swap router not set");
+                    require(
+                        IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                        "USDC approval to router failed"
+                    );
+                    ExactInputSingleParams memory params = ExactInputSingleParams({
+                        tokenIn: usdcToken,
+                        tokenOut: targetToken,
+                        fee: 3000,
+                        recipient: stream.employee,
+                        deadline: block.timestamp + 300,
+                        amountIn: employeeAmount,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    });
+                    ISwapRouter(swapRouter).exactInputSingle(params);
+                } else {
+                    require(
+                        IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                        "USDC transfer to employee failed"
+                    );
+                }
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
             }
             
@@ -481,16 +856,18 @@ contract StreamingPayroll {
                     stream.isActive = false;
                 }
 
+                uint256 coopFee = _routeCoopFee(claimable);
+
                 string memory country = streamCountries[streamId];
                 uint256 taxRate = taxRates[country];
                 address taxAuthority = taxAuthorities[country];
 
                 uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable;
+                uint256 employeeAmount = claimable - coopFee;
 
                 if (taxRate > 0 && taxAuthority != address(0)) {
                     taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount;
+                    employeeAmount = claimable - taxAmount - coopFee;
                 }
 
                 if (taxAmount > 0) {
@@ -500,10 +877,30 @@ contract StreamingPayroll {
                     );
                 }
 
-                require(
-                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                    "USDC transfer to employee failed"
-                );
+                address targetToken = targetPayoutTokens[streamId];
+                if (targetToken != address(0) && targetToken != usdcToken) {
+                    require(swapRouter != address(0), "Swap router not set");
+                    require(
+                        IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                        "USDC approval to router failed"
+                    );
+                    ExactInputSingleParams memory params = ExactInputSingleParams({
+                        tokenIn: usdcToken,
+                        tokenOut: targetToken,
+                        fee: 3000,
+                        recipient: stream.employee,
+                        deadline: block.timestamp + 300,
+                        amountIn: employeeAmount,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    });
+                    ISwapRouter(swapRouter).exactInputSingle(params);
+                } else {
+                    require(
+                        IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                        "USDC transfer to employee failed"
+                    );
+                }
 
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
             }
@@ -512,6 +909,26 @@ contract StreamingPayroll {
 
     function setPayrollOracle(address _oracle) external onlyOwner {
         payrollOracle = _oracle;
+    }
+
+    function setBenefitsVault(address _vault) external onlyOwner {
+        benefitsVault = _vault;
+    }
+
+    function _routeCoopFee(uint256 claimable) internal returns (uint256) {
+        if (benefitsVault == address(0) || claimable == 0) {
+            return 0;
+        }
+        uint256 coopFee = (claimable * 2) / 100;
+        if (coopFee > 0) {
+            // Approve or transfer from this contract to vault
+            require(
+                IERC20(usdcToken).transfer(benefitsVault, coopFee),
+                "USDC co-op fee transfer failed"
+            );
+            IMicroBenefitsVault(benefitsVault).notifyCoopFee(coopFee);
+        }
+        return coopFee;
     }
 
     /**
@@ -527,6 +944,13 @@ contract StreamingPayroll {
         uint256 totalCap,
         string memory country
     ) public onlyCleared(employee) returns (bytes32) {
+        if (treasuryBufferManager != address(0)) {
+            require(
+                ITreasuryBufferManager(treasuryBufferManager).canCreateStream(msg.sender),
+                "BufferManager: Warning state - stream creation restricted"
+            );
+        }
+
         require(employee != address(0), "Invalid employee address");
         require(totalCap > 0, "Total cap must be positive");
 
@@ -619,17 +1043,19 @@ contract StreamingPayroll {
             stream.isActive = false;
         }
 
+        uint256 coopFee = _routeCoopFee(payout);
+
         // Calculate tax withholding split
         string memory country = streamCountries[streamId];
         uint256 taxRate = taxRates[country];
         address taxAuthority = taxAuthorities[country];
 
         uint256 taxAmount = 0;
-        uint256 employeeAmount = payout;
+        uint256 employeeAmount = payout - coopFee;
 
         if (taxRate > 0 && taxAuthority != address(0)) {
             taxAmount = (payout * taxRate) / 10000;
-            employeeAmount = payout - taxAmount;
+            employeeAmount = payout - taxAmount - coopFee;
         }
 
         if (taxAmount > 0) {
@@ -639,10 +1065,30 @@ contract StreamingPayroll {
             );
         }
 
-        require(
-            IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-            "USDC transfer to employee failed"
-        );
+        address targetToken = targetPayoutTokens[streamId];
+        if (targetToken != address(0) && targetToken != usdcToken) {
+            require(swapRouter != address(0), "Swap router not set");
+            require(
+                IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                "USDC approval to router failed"
+            );
+            ExactInputSingleParams memory params = ExactInputSingleParams({
+                tokenIn: usdcToken,
+                tokenOut: targetToken,
+                fee: 3000,
+                recipient: stream.employee,
+                deadline: block.timestamp + 300,
+                amountIn: employeeAmount,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+            ISwapRouter(swapRouter).exactInputSingle(params);
+        } else {
+            require(
+                IERC20(usdcToken).transfer(stream.employee, employeeAmount),
+                "USDC transfer to employee failed"
+            );
+        }
 
         emit PrivateFundsWithdrawn(streamId, stream.employee, payout);
     }
