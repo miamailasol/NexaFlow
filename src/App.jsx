@@ -267,6 +267,14 @@ function App() {
   const [newEmployeeRate, setNewEmployeeRate] = useState(0.004)
   const [newEmployeeCap, setNewEmployeeCap] = useState(1000)
 
+  // Bulk Stream Onboarding and Checkboxes State
+  const [bulkOnboardingType, setBulkOnboardingType] = useState('individual')
+  const [csvText, setCsvText] = useState('')
+  const [csvFileName, setCsvFileName] = useState('')
+  const [parsedWorkers, setParsedWorkers] = useState([])
+  const [csvError, setCsvError] = useState('')
+  const [selectedStreamIds, setSelectedStreamIds] = useState([])
+
   // Transaction Ledger State
   const [transactions, setTransactions] = useState([
     {
@@ -621,6 +629,298 @@ function App() {
       triggerToast('Stream Creation Failed', err.message)
     }
   }
+
+  // Download CSV template
+  const downloadCsvTemplate = () => {
+    const csvContent = "Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.002,500,Alice Smith,UI Designer\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "nexaflow_onboarding_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Parse CSV
+  const parseCsvData = (text) => {
+    setCsvError('');
+    const lines = text.split('\n');
+    const workers = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(',');
+      if (cols.length < 3) {
+        setCsvError(`Line ${i + 1} has insufficient columns. Address, Flow Rate, Cap required.`);
+        return;
+      }
+      
+      const address = cols[0].trim();
+      const flowRate = parseFloat(cols[1].trim());
+      const totalCap = parseFloat(cols[2].trim());
+      const name = cols[3] ? cols[3].trim() : `Worker ${i}`;
+      const role = cols[4] ? cols[4].trim() : 'Engineer';
+
+      if (!address.startsWith('0x') || address.length !== 42) {
+        setCsvError(`Line ${i + 1}: Invalid Ethereum Address (${address})`);
+        return;
+      }
+      if (isNaN(flowRate) || flowRate <= 0) {
+        setCsvError(`Line ${i + 1}: Invalid Flow Rate (${cols[1]})`);
+        return;
+      }
+      if (isNaN(totalCap) || totalCap <= 0) {
+        setCsvError(`Line ${i + 1}: Invalid Total Cap (${cols[2]})`);
+        return;
+      }
+
+      workers.push({ address, flowRate, totalCap, name, role });
+    }
+
+    if (workers.length === 0) {
+      setCsvError('No valid workers found in CSV.');
+      return;
+    }
+
+    setParsedWorkers(workers);
+    triggerToast('CSV Parsed', `${workers.length} workers successfully parsed.`);
+  };
+
+  const handleCsvFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      setCsvText(text);
+      parseCsvData(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCreateStreamsBatch = async (e) => {
+    e.preventDefault();
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet first.');
+      return;
+    }
+    if (parsedWorkers.length === 0) {
+      triggerToast('No workers parsed', 'Please upload or paste a valid CSV first.');
+      return;
+    }
+
+    const totalRequiredCap = parsedWorkers.reduce((sum, w) => sum + w.totalCap, 0);
+    if (usdcAllowance < totalRequiredCap) {
+      triggerToast('USDC Allowance Needed', `Please approve the streaming escrow contract for at least ${totalRequiredCap} USDC first.`);
+      return;
+    }
+
+    try {
+      const employeesArr = parsedWorkers.map(w => w.address);
+      const flowRatesArr = parsedWorkers.map(w => parseUnits(w.flowRate.toString(), 6));
+      const totalCapsArr = parsedWorkers.map(w => parseUnits(w.totalCap.toString(), 6));
+
+      triggerToast('Broadcasting Batch', `Submitting createStreamsBatch for ${parsedWorkers.length} workers...`);
+
+      const hash = await writeContractAsync({
+        address: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'createStreamsBatch',
+        args: [employeesArr, flowRatesArr, totalCapsArr]
+      });
+
+      triggerToast('Transaction Submitted', 'Waiting for on-chain block confirmation...');
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+      let generatedStreamIds = [];
+      try {
+        const logs = parseEventLogs({
+          abi: STREAMING_PAYROLL_ABI,
+          eventName: 'StreamCreated',
+          logs: receipt.logs
+        });
+        if (logs && logs.length > 0) {
+          generatedStreamIds = logs.map(log => log.args.streamId);
+        }
+      } catch (err) {
+        console.warn("Batch event logs parse failed", err);
+      }
+
+      const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
+      const timestamp = Number(block.timestamp);
+
+      const newEmps = parsedWorkers.map((w, idx) => {
+        const streamId = generatedStreamIds[idx] || ('0x' + Math.random().toString(16).substr(2, 64)).padEnd(66, '0');
+        return {
+          id: streamId,
+          name: w.name,
+          role: w.role,
+          location: 'Remote 🌐',
+          address: w.address,
+          flowRate: w.flowRate,
+          totalCap: w.totalCap,
+          accruedPaid: 0,
+          accruedLive: 0,
+          lastUpdated: timestamp,
+          isActive: true,
+          healthPercent: 5,
+          retirementPercent: 5,
+          emergencyPercent: 5,
+          complianceStatus: 'Verified',
+          avatar: w.name.split(' ').map(n => n[0]).join('').toUpperCase().substr(0, 2)
+        };
+      });
+
+      setEmployees(prev => [...newEmps, ...prev]);
+      const newStreamIds = [...newEmps.map(emp => emp.id), ...streamIds];
+      setStreamIds(newStreamIds);
+      localStorage.setItem('nexaflow_stream_ids', JSON.stringify(newStreamIds));
+
+      const newTx = {
+        id: Date.now(),
+        type: 'Batch Streams Deployed',
+        engineer: `${parsedWorkers.length} Employees`,
+        amount: `${totalRequiredCap} USDC Locked`,
+        txHash: hash.slice(0, 8) + '...' + hash.slice(-4),
+        time: 'Just now',
+        gas: '0.0055 USDC (Arc Gas)',
+        status: 'Finalized'
+      };
+      setTransactions(prevTx => [newTx, ...prevTx]);
+
+      triggerToast('Batch Streams Deployed', `Successfully deployed ${parsedWorkers.length} continuous pay streams.`);
+      
+      setParsedWorkers([]);
+      setCsvText('');
+      setCsvFileName('');
+      setBulkOnboardingType('individual');
+      refetchUsdc();
+      refetchAllowance();
+    } catch (err) {
+      console.error(err);
+      triggerToast('Batch Stream Creation Failed', err.message);
+    }
+  };
+
+  const handleBatchPause = async () => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet.');
+      return;
+    }
+    if (selectedStreamIds.length === 0) return;
+
+    try {
+      triggerToast('Pausing Streams', `Submitting pauseStreamsBatch for ${selectedStreamIds.length} streams...`);
+      
+      const hash = await writeContractAsync({
+        address: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'pauseStreamsBatch',
+        args: [selectedStreamIds]
+      });
+
+      triggerToast('Transaction Submitted', 'Waiting for on-chain block confirmation...');
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      setEmployees((prev) =>
+        prev.map((e) => {
+          if (selectedStreamIds.includes(e.id)) {
+            return {
+              ...e,
+              accruedPaid: e.accruedLive,
+              isActive: false,
+              lastUpdated: Math.floor(Date.now() / 1000)
+            };
+          }
+          return e;
+        })
+      );
+      
+      const newTx = {
+        id: Date.now(),
+        type: 'Batch Streams Paused',
+        engineer: `${selectedStreamIds.length} Employees`,
+        amount: 'Accrued Wages Paid',
+        txHash: hash.slice(0, 8) + '...' + hash.slice(-4),
+        time: 'Just now',
+        gas: '0.0042 USDC (Arc Gas)',
+        status: 'Finalized'
+      };
+      setTransactions((prevTx) => [newTx, ...prevTx]);
+
+      triggerToast(
+        'Streams Paused',
+        `Successfully paused ${selectedStreamIds.length} streams and disbursed accrued wages.`
+      );
+      setSelectedStreamIds([]);
+      refetchUsdc();
+    } catch (e) {
+      console.error(e);
+      triggerToast('Batch Pause Failed', e.message);
+    }
+  };
+
+  const handleBatchWithdraw = async () => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet.');
+      return;
+    }
+    if (selectedStreamIds.length === 0) return;
+
+    try {
+      triggerToast('Claiming Wages', `Submitting withdrawFundsBatch for ${selectedStreamIds.length} streams...`);
+      
+      const hash = await writeContractAsync({
+        address: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'withdrawFundsBatch',
+        args: [selectedStreamIds]
+      });
+
+      triggerToast('Transaction Submitted', 'Waiting for on-chain block confirmation...');
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      setEmployees((prev) =>
+        prev.map((e) => {
+          if (selectedStreamIds.includes(e.id)) {
+            return {
+              ...e,
+              accruedPaid: e.accruedLive,
+              lastUpdated: Math.floor(Date.now() / 1000)
+            };
+          }
+          return e;
+        })
+      );
+
+      const newTx = {
+        id: Date.now(),
+        type: 'Batch Claim Processed',
+        engineer: `${selectedStreamIds.length} Employees`,
+        amount: 'USDC Disbursed',
+        txHash: hash.slice(0, 8) + '...' + hash.slice(-4),
+        time: 'Just now',
+        gas: '0.0039 USDC (Arc Gas)',
+        status: 'Finalized'
+      };
+      setTransactions((prevTx) => [newTx, ...prevTx]);
+
+      triggerToast(
+        'Batch Claim Successful',
+        `Wages withdrawn for selected streams.`
+      );
+      setSelectedStreamIds([]);
+      refetchUsdc();
+    } catch (e) {
+      console.error(e);
+      triggerToast('Batch Claim Failed', e.message);
+    }
+  };
 
   // Handle stream withdrawal (on-chain claim)
   const handleWithdrawal = async (streamIdObj) => {
@@ -1388,113 +1688,256 @@ function App() {
                 <Plus size={18} color="var(--color-primary)" />
                 Create New Continuous Pay Flow
               </div>
-              
-              <form onSubmit={handleCreateStream} className="stream-form-grid">
-                <div className="form-group form-name">
-                  <label className="form-label">Team Member Name</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Tan Wei Liang"
-                    value={newEmployeeName}
-                    onChange={(e) => setNewEmployeeName(e.target.value)}
-                    required
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Name of the wage recipient.</div>
-                </div>
 
-                <div className="form-group form-role">
-                  <label className="form-label">Role Title</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Backend Developer"
-                    value={newEmployeeRole}
-                    onChange={(e) => setNewEmployeeRole(e.target.value)}
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Designation or department.</div>
-                </div>
+              {/* Toggle Tabs for Single vs Bulk */}
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                marginBottom: '24px',
+                borderBottom: '2px dashed var(--border-color)',
+                paddingBottom: '16px'
+              }}>
+                <button
+                  type="button"
+                  className={`btn ${bulkOnboardingType === 'individual' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '6px' }}
+                  onClick={() => setBulkOnboardingType('individual')}
+                >
+                  Single Worker
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${bulkOnboardingType === 'bulk' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '6px' }}
+                  onClick={() => setBulkOnboardingType('bulk')}
+                >
+                  Bulk Upload Workers (CSV)
+                </button>
+              </div>
 
-                <div className="form-group form-currency">
-                  <label className="form-label">Local Currency / Country</label>
-                  <select
-                    className="form-input"
-                    value={newEmployeeLoc}
-                    onChange={(e) => setNewEmployeeLoc(e.target.value)}
-                  >
-                    <option value="Singapore 🇸🇬">Singapore 🇸🇬 (SGD)</option>
-                    <option value="Brazil 🇧🇷">Brazil 🇧🇷 (BRL)</option>
-                    <option value="Nigeria 🇳🇬">Nigeria 🇳🇬 (NGN)</option>
-                    <option value="Taiwan 🇹🇼">Taiwan 🇹🇼 (TWD)</option>
-                  </select>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Jurisdiction for automated tax reserve routing.</div>
-                </div>
-
-                <div className="form-group form-limit">
-                  <label className="form-label">Maximum Payment Limit (USDC)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newEmployeeCap}
-                    onChange={(e) => setNewEmployeeCap(e.target.value)}
-                    required
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    The total amount of funds locked in the continuous pay flow safe.
+              {bulkOnboardingType === 'individual' ? (
+                <form onSubmit={handleCreateStream} className="stream-form-grid">
+                  <div className="form-group form-name">
+                    <label className="form-label">Team Member Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Tan Wei Liang"
+                      value={newEmployeeName}
+                      onChange={(e) => setNewEmployeeName(e.target.value)}
+                      required
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Name of the wage recipient.</div>
                   </div>
-                </div>
 
-                <div className="form-group form-address">
-                  <label className="form-label">Recipient Payment Wallet / Address</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="0x..."
-                    value={newEmployeeAddress}
-                    onChange={(e) => setNewEmployeeAddress(e.target.value)}
-                    required
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    The digital wallet destination where the continuous salary will stream.
+                  <div className="form-group form-role">
+                    <label className="form-label">Role Title</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Backend Developer"
+                      value={newEmployeeRole}
+                      onChange={(e) => setNewEmployeeRole(e.target.value)}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Designation or department.</div>
                   </div>
-                </div>
 
-                <div className="form-group form-velocity">
-                  <label className="form-label">Flow Velocity: {newEmployeeRate} USDC/sec (~${(newEmployeeRate * 3600).toFixed(2)}/hour)</label>
-                  <input
-                    type="range"
-                    min="0.001"
-                    max="0.02"
-                    step="0.0005"
-                    className="range-slider"
-                    value={newEmployeeRate}
-                    onChange={(e) => setNewEmployeeRate(e.target.value)}
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Adjust how fast salary builds up (per-second distribution rate).
+                  <div className="form-group form-currency">
+                    <label className="form-label">Local Currency / Country</label>
+                    <select
+                      className="form-input"
+                      value={newEmployeeLoc}
+                      onChange={(e) => setNewEmployeeLoc(e.target.value)}
+                    >
+                      <option value="Singapore 🇸🇬">Singapore 🇸🇬 (SGD)</option>
+                      <option value="Brazil 🇧🇷">Brazil 🇧🇷 (BRL)</option>
+                      <option value="Nigeria 🇳🇬">Nigeria 🇳🇬 (NGN)</option>
+                      <option value="Taiwan 🇹🇼">Taiwan 🇹🇼 (TWD)</option>
+                    </select>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Jurisdiction for automated tax reserve routing.</div>
                   </div>
-                </div>
 
-                <div className="form-actions-wrapper">
-                  {/* Action Preview */}
-                  <div className="action-preview-card">
-                    <div className="action-preview-title">
-                      <Zap size={14} color="var(--color-secondary)" fill="var(--color-secondary)" />
-                      What happens next?
+                  <div className="form-group form-limit">
+                    <label className="form-label">Maximum Payment Limit (USDC)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={newEmployeeCap}
+                      onChange={(e) => setNewEmployeeCap(e.target.value)}
+                      required
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      The total amount of funds locked in the continuous pay flow safe.
                     </div>
-                    <ul className="action-preview-list">
-                      <li>You lock <strong>{newEmployeeCap || '0'} USDC</strong> in a secure automated pay safe.</li>
-                      <li>Continuous second-by-second payouts will activate instantly for <strong>{newEmployeeName || 'Recipient'}</strong>.</li>
-                      <li>You retain full power to pause or close the channel to retrieve unspent funds.</li>
-                    </ul>
                   </div>
 
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '46px' }} disabled={!isConnected}>
-                    <Zap size={16} />
-                    Activate Pay Flow
-                  </button>
-                </div>
-              </form>
+                  <div className="form-group form-address">
+                    <label className="form-label">Recipient Payment Wallet / Address</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="0x..."
+                      value={newEmployeeAddress}
+                      onChange={(e) => setNewEmployeeAddress(e.target.value)}
+                      required
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      The digital wallet destination where the continuous salary will stream.
+                    </div>
+                  </div>
+
+                  <div className="form-group form-velocity">
+                    <label className="form-label">Flow Velocity: {newEmployeeRate} USDC/sec (~${(newEmployeeRate * 3600).toFixed(2)}/hour)</label>
+                    <input
+                      type="range"
+                      min="0.001"
+                      max="0.02"
+                      step="0.0005"
+                      className="range-slider"
+                      value={newEmployeeRate}
+                      onChange={(e) => setNewEmployeeRate(e.target.value)}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Adjust how fast salary builds up (per-second distribution rate).
+                    </div>
+                  </div>
+
+                  <div className="form-actions-wrapper">
+                    {/* Action Preview */}
+                    <div className="action-preview-card">
+                      <div className="action-preview-title">
+                        <Zap size={14} color="var(--color-secondary)" fill="var(--color-secondary)" />
+                        What happens next?
+                      </div>
+                      <ul className="action-preview-list">
+                        <li>You lock <strong>{newEmployeeCap || '0'} USDC</strong> in a secure automated pay safe.</li>
+                        <li>Continuous second-by-second payouts will activate instantly for <strong>{newEmployeeName || 'Recipient'}</strong>.</li>
+                        <li>You retain full power to pause or close the channel to retrieve unspent funds.</li>
+                      </ul>
+                    </div>
+
+                    <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '46px' }} disabled={!isConnected}>
+                      <Zap size={16} />
+                      Activate Pay Flow
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleCreateStreamsBatch} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{
+                    border: '2px dashed var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '24px',
+                    textAlign: 'center',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <div style={{ fontSize: '14px', fontWeight: '800' }}>
+                      Upload Worker Allocation CSV
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCsvFileUpload}
+                      style={{ cursor: 'pointer', maxWidth: '300px' }}
+                    />
+                    {csvFileName && (
+                      <span className="badge badge-info" style={{ textTransform: 'none' }}>
+                        File Selected: {csvFileName}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Or Paste CSV Config Text</label>
+                    <textarea
+                      className="form-input"
+                      rows={5}
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', resize: 'vertical' }}
+                      placeholder="Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer"
+                      value={csvText}
+                      onChange={(e) => {
+                        setCsvText(e.target.value);
+                        parseCsvData(e.target.value);
+                      }}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                      Columns format: Address, FlowRate, Cap, Name, Role (includes Header row).
+                    </div>
+                  </div>
+
+                  {csvError && (
+                    <div className="alert-message warning" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', marginBottom: 0 }}>
+                      <AlertTriangle size={18} color="var(--color-error)" />
+                      <span style={{ fontSize: '13px', fontWeight: '800' }}>{csvError}</span>
+                    </div>
+                  )}
+
+                  {parsedWorkers.length > 0 && (
+                    <div className="action-preview-card success-preview" style={{ padding: '16px', borderRadius: '8px' }}>
+                      <div className="action-preview-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        <CheckCircle size={16} color="var(--color-success)" />
+                        <strong>Parsed Onboarding Configuration ({parsedWorkers.length} Workers)</strong>
+                      </div>
+                      <div className="table-container" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                        <table className="data-table" style={{ fontSize: '11px' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ padding: '8px', fontSize: '11px' }}>Name / Role</th>
+                              <th style={{ padding: '8px', fontSize: '11px' }}>Address</th>
+                              <th style={{ padding: '8px', fontSize: '11px' }}>Flow Rate</th>
+                              <th style={{ padding: '8px', fontSize: '11px' }}>Limit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsedWorkers.map((w, idx) => (
+                              <tr key={idx}>
+                                <td style={{ padding: '8px' }}>
+                                  <strong>{w.name}</strong>
+                                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{w.role}</div>
+                                </td>
+                                <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{w.address.slice(0, 6)}...{w.address.slice(-4)}</td>
+                                <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{w.flowRate} USDC/s</td>
+                                <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{w.totalCap} USDC</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop: '12px', fontSize: '13px', fontWeight: '800', display: 'flex', justifyContent: 'space-between', borderTop: '2px dashed var(--border-color)', paddingTop: '8px' }}>
+                        <span>Aggregate Locked Deposit:</span>
+                        <span style={{ color: 'var(--color-secondary)' }}>
+                          {parsedWorkers.reduce((sum, w) => sum + w.totalCap, 0).toLocaleString()} USDC
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={downloadCsvTemplate}
+                      style={{ flexGrow: 1 }}
+                    >
+                      Download CSV Template
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      style={{ flexGrow: 2, height: '46px' }}
+                      disabled={!isConnected || parsedWorkers.length === 0}
+                    >
+                      <Zap size={16} />
+                      Deploy Bulk Streams
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* Active Streams Table */}
@@ -1504,13 +1947,90 @@ function App() {
                 Active Remote Workforce Salary Streams
               </div>
 
+              {/* Master Checkbox & Batch Selection Actions */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+                flexWrap: 'wrap',
+                gap: '12px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1.5px solid var(--border-color)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={employees.length > 0 && selectedStreamIds.length === employees.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedStreamIds(employees.map(emp => emp.id));
+                      } else {
+                        setSelectedStreamIds([]);
+                      }
+                    }}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '13px', fontWeight: '800' }}>Select All ({employees.length})</span>
+                </div>
+
+                {selectedStreamIds.length > 0 && (
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ padding: '6px 12px', fontSize: '11px', backgroundColor: 'var(--color-error)', color: '#000' }}
+                      onClick={handleBatchPause}
+                      disabled={!isConnected}
+                    >
+                      Pause Selected
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '6px 12px', fontSize: '11px' }}
+                      onClick={handleBatchWithdraw}
+                      disabled={!isConnected}
+                    >
+                      Claim Selected
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: '6px 12px', fontSize: '11px', background: '#FFF' }}
+                      onClick={() => setSelectedStreamIds([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 {employees.map((emp) => (
                   <div key={emp.id} className="stream-card" id={`stream-card-${emp.id}`} style={{
                     borderColor: glowTargetId === `stream-card-${emp.id}` ? 'var(--color-success)' : '',
                     boxShadow: glowTargetId === `stream-card-${emp.id}` ? '0 0 15px rgba(16, 185, 129, 0.3)' : ''
                   }}>
-                    <div className="stream-card-section stream-card-info">
+                    {/* Individual Row Checkbox */}
+                    <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'stretch', paddingRight: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedStreamIds.includes(emp.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStreamIds(prev => [...prev, emp.id]);
+                          } else {
+                            setSelectedStreamIds(prev => prev.filter(id => id !== emp.id));
+                          }
+                        }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                    </div>
+
+                    <div className="stream-card-section stream-card-info" style={{ width: '22%' }}>
                       <div className="avatar">{emp.avatar}</div>
                       <div className="engineer-details">
                         <h4>{emp.name}</h4>
@@ -1519,14 +2039,14 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="stream-card-section stream-card-address">
+                    <div className="stream-card-section stream-card-address" style={{ width: '22%' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '600' }}>Worker Digital Account Address</div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-main)', wordBreak: 'break-all', fontWeight: '600' }}>
                         {emp.address}
                       </div>
                     </div>
 
-                    <div className="stream-card-section stream-card-counter-wrapper">
+                    <div className="stream-card-section stream-card-counter-wrapper" style={{ width: '25%' }}>
                       <span className="stream-counter-label">Accruing Balance</span>
                       <div className="stream-counter-value">
                         {emp.accruedLive.toFixed(5)} USDC
@@ -1536,7 +2056,7 @@ function App() {
                       </span>
                     </div>
 
-                    <div className="stream-card-section stream-card-progress">
+                    <div className="stream-card-section stream-card-progress" style={{ width: '20%' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                         <span>{(emp.accruedLive / emp.totalCap * 100).toFixed(1)}%</span>
                         <span>Limit: {emp.totalCap} USDC</span>
