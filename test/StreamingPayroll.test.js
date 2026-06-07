@@ -131,4 +131,139 @@ describe("StreamingPayroll Batch Operations", function () {
         const finalBalance1 = await mockUSDC.balanceOf(employee1.address);
         expect(finalBalance1 - initialBalance1).to.be.closeTo(100n, 20n);
     });
+
+    describe("Private Streams with Commitment Hash & Oracle Signatures", function () {
+        it("should successfully create a private stream and withdraw funds with a valid oracle signature", async function () {
+            const flowRate = 15n;
+            const totalCap = 1500n;
+            const salt = ethers.randomBytes(32);
+            
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const encoded = coder.encode(["uint256", "uint256", "bytes32"], [flowRate, totalCap, salt]);
+            const commitmentHash = ethers.keccak256(encoded);
+
+            const tx = await streamingPayroll.createPrivateStream(employee1.address, commitmentHash, totalCap);
+            const receipt = await tx.wait();
+
+            // Compute stream ID to verify mapping
+            // streamId = keccak256(abi.encodePacked(msg.sender, employee, block.timestamp, commitmentHash))
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+            const timestamp = block.timestamp;
+
+            const streamId = ethers.solidityPackedKeccak256(
+                ["address", "address", "uint256", "bytes32"],
+                [owner.address, employee1.address, timestamp, commitmentHash]
+            );
+
+            const privateStream = await streamingPayroll.privateStreams(streamId);
+            expect(privateStream.employer).to.equal(owner.address);
+            expect(privateStream.employee).to.equal(employee1.address);
+            expect(privateStream.commitmentHash).to.equal(commitmentHash);
+            expect(privateStream.totalCap).to.equal(totalCap);
+            expect(privateStream.isActive).to.be.true;
+
+            // Generate oracle signature for withdrawal
+            // withdrawPrivateFunds(bytes32 streamId, uint256 claimableAmount, uint256 flowRate, bytes32 salt, bytes calldata signature)
+            const claimableAmount = 150n;
+            const msgHash = ethers.keccak256(coder.encode(["bytes32", "uint256"], [streamId, claimableAmount]));
+            const signature = await owner.signMessage(ethers.getBytes(msgHash));
+
+            const initialBalance = await mockUSDC.balanceOf(employee1.address);
+
+            // Execute withdrawal
+            const withdrawTx = await streamingPayroll.connect(employee1).withdrawPrivateFunds(
+                streamId,
+                claimableAmount,
+                flowRate,
+                salt,
+                signature
+            );
+            await withdrawTx.wait();
+
+            const finalBalance = await mockUSDC.balanceOf(employee1.address);
+            expect(finalBalance - initialBalance).to.equal(150n);
+
+            const updatedStream = await streamingPayroll.privateStreams(streamId);
+            expect(updatedStream.accruedPaid).to.equal(150n);
+        });
+
+        it("should revert if commitment parameters (flowRate, salt) do not match hash", async function () {
+            const flowRate = 15n;
+            const totalCap = 1500n;
+            const salt = ethers.randomBytes(32);
+            
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const commitmentHash = ethers.keccak256(coder.encode(["uint256", "uint256", "bytes32"], [flowRate, totalCap, salt]));
+
+            const tx = await streamingPayroll.createPrivateStream(employee1.address, commitmentHash, totalCap);
+            const receipt = await tx.wait();
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+            const timestamp = block.timestamp;
+            const streamId = ethers.solidityPackedKeccak256(
+                ["address", "address", "uint256", "bytes32"],
+                [owner.address, employee1.address, timestamp, commitmentHash]
+            );
+
+            const claimableAmount = 150n;
+            const msgHash = ethers.keccak256(coder.encode(["bytes32", "uint256"], [streamId, claimableAmount]));
+            const signature = await owner.signMessage(ethers.getBytes(msgHash));
+
+            // Call with wrong flowRate
+            await expect(
+                streamingPayroll.connect(employee1).withdrawPrivateFunds(
+                    streamId,
+                    claimableAmount,
+                    flowRate + 1n,
+                    salt,
+                    signature
+                )
+            ).to.be.revertedWith("Invalid commitment parameters");
+
+            // Call with wrong salt
+            const wrongSalt = ethers.randomBytes(32);
+            await expect(
+                streamingPayroll.connect(employee1).withdrawPrivateFunds(
+                    streamId,
+                    claimableAmount,
+                    flowRate,
+                    wrongSalt,
+                    signature
+                )
+            ).to.be.revertedWith("Invalid commitment parameters");
+        });
+
+        it("should revert if signature is not from the authorized payroll oracle", async function () {
+            const flowRate = 15n;
+            const totalCap = 1500n;
+            const salt = ethers.randomBytes(32);
+            
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const commitmentHash = ethers.keccak256(coder.encode(["uint256", "uint256", "bytes32"], [flowRate, totalCap, salt]));
+
+            const tx = await streamingPayroll.createPrivateStream(employee1.address, commitmentHash, totalCap);
+            const receipt = await tx.wait();
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+            const timestamp = block.timestamp;
+            const streamId = ethers.solidityPackedKeccak256(
+                ["address", "address", "uint256", "bytes32"],
+                [owner.address, employee1.address, timestamp, commitmentHash]
+            );
+
+            const claimableAmount = 150n;
+            const msgHash = ethers.keccak256(coder.encode(["bytes32", "uint256"], [streamId, claimableAmount]));
+            
+            // Sign using employee1 instead of oracle (owner)
+            const badSignature = await employee1.signMessage(ethers.getBytes(msgHash));
+
+            await expect(
+                streamingPayroll.connect(employee1).withdrawPrivateFunds(
+                    streamId,
+                    claimableAmount,
+                    flowRate,
+                    salt,
+                    badSignature
+                )
+            ).to.be.revertedWith("Invalid oracle signature");
+        });
+    });
 });

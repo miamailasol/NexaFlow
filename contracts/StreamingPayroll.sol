@@ -29,12 +29,25 @@ contract StreamingPayroll {
         bool isActive;
     }
 
+    struct PrivateStreamCommitment {
+        address employer;
+        address employee;
+        bytes32 commitmentHash; // keccak256(abi.encode(flowRate, totalCap, salt))
+        uint256 startTime;
+        uint256 lastUpdated;
+        uint256 accruedPaid;
+        uint256 totalCap;
+        bool isActive;
+    }
+
     // USDC Address on Arc Chain: 0x3600000000000000000000000000000000000000
     address public immutable usdcToken;
     address public owner;
     address public complianceRegistry;
+    address public payrollOracle;
 
     mapping(bytes32 => Stream) public streams;
+    mapping(bytes32 => PrivateStreamCommitment) public privateStreams;
     mapping(address => bytes32[]) public employeeStreams;
     mapping(address => bytes32[]) public employerStreams;
     mapping(address => uint256) public employerBalances;
@@ -44,6 +57,8 @@ contract StreamingPayroll {
     event StreamUpdated(bytes32 indexed streamId, uint256 newFlowRate);
     event StreamCancelled(bytes32 indexed streamId, uint256 remainingRefunded);
     event FundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
+    event PrivateStreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, bytes32 commitmentHash, uint256 totalCap);
+    event PrivateFundsWithdrawn(bytes32 indexed streamId, address indexed employee, uint256 amount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -70,6 +85,7 @@ contract StreamingPayroll {
     constructor(address _usdcToken) {
         usdcToken = _usdcToken;
         owner = msg.sender;
+        payrollOracle = msg.sender;
     }
 
     function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
@@ -370,6 +386,122 @@ contract StreamingPayroll {
 
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
             }
+        }
+    }
+
+    function setPayrollOracle(address _oracle) external onlyOwner {
+        payrollOracle = _oracle;
+    }
+
+    /**
+     * @notice Create a private streaming payroll with masked flow rate.
+     * @param employee Remote worker address.
+     * @param commitmentHash Hash of keccak256(abi.encode(flowRate, totalCap, salt)).
+     * @param totalCap Total amount escrowed for this milestone.
+     */
+    function createPrivateStream(
+        address employee,
+        bytes32 commitmentHash,
+        uint256 totalCap
+    ) external onlyCleared(employee) returns (bytes32) {
+        require(employee != address(0), "Invalid employee address");
+        require(totalCap > 0, "Total cap must be positive");
+
+        // Lock total cap from employer into contract, using deposited balance if available
+        if (employerBalances[msg.sender] >= totalCap) {
+            employerBalances[msg.sender] -= totalCap;
+        } else {
+            uint256 remaining = totalCap - employerBalances[msg.sender];
+            employerBalances[msg.sender] = 0;
+            require(
+                IERC20(usdcToken).transferFrom(msg.sender, address(this), remaining),
+                "USDC deposit failed"
+            );
+        }
+
+        bytes32 streamId = keccak256(
+            abi.encodePacked(msg.sender, employee, block.timestamp, commitmentHash)
+        );
+
+        privateStreams[streamId] = PrivateStreamCommitment({
+            employer: msg.sender,
+            employee: employee,
+            commitmentHash: commitmentHash,
+            startTime: block.timestamp,
+            lastUpdated: block.timestamp,
+            accruedPaid: 0,
+            totalCap: totalCap,
+            isActive: true
+        });
+
+        employeeStreams[employee].push(streamId);
+        employerStreams[msg.sender].push(streamId);
+
+        emit PrivateStreamCreated(streamId, msg.sender, employee, commitmentHash, totalCap);
+        return streamId;
+    }
+
+    /**
+     * @notice Withdraw private stream funds using a valid payroll oracle signature.
+     */
+    function withdrawPrivateFunds(
+        bytes32 streamId,
+        uint256 claimableAmount,
+        uint256 flowRate,
+        bytes32 salt,
+        bytes calldata signature
+    ) external onlyCleared(msg.sender) {
+        PrivateStreamCommitment storage stream = privateStreams[streamId];
+        require(stream.isActive, "Stream is not active");
+        require(stream.employee == msg.sender, "Only stream employee can withdraw");
+
+        // Validate commitment hash
+        require(
+            keccak256(abi.encode(flowRate, stream.totalCap, salt)) == stream.commitmentHash,
+            "Invalid commitment parameters"
+        );
+
+        // Verify oracle signature
+        bytes32 messageHash = keccak256(abi.encode(streamId, claimableAmount));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        address signer = recoverSigner(ethSignedMessageHash, signature);
+        require(signer == payrollOracle, "Invalid oracle signature");
+
+        require(claimableAmount > 0, "Claimable amount must be positive");
+        uint256 remaining = stream.totalCap - stream.accruedPaid;
+        require(claimableAmount > stream.accruedPaid, "No new funds to withdraw");
+        uint256 payout = claimableAmount - stream.accruedPaid;
+
+        if (payout > remaining) {
+            payout = remaining;
+        }
+
+        stream.accruedPaid += payout;
+        stream.lastUpdated = block.timestamp;
+
+        if (stream.accruedPaid >= stream.totalCap) {
+            stream.isActive = false;
+        }
+
+        require(
+            IERC20(usdcToken).transfer(stream.employee, payout),
+            "USDC transfer failed"
+        );
+
+        emit PrivateFundsWithdrawn(streamId, stream.employee, payout);
+    }
+
+    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) public pure returns (address) {
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+        return ecrecover(_ethSignedMessageHash, v, r, s);
+    }
+
+    function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
+        require(sig.length == 65, "invalid signature length");
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
         }
     }
 }
