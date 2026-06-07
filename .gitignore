@@ -25,3 +25,9 @@ dist-ssr
 cache
 artifacts
 .env
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.test
+.env.*
