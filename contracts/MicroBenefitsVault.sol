@@ -12,6 +12,10 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 }
 
+interface ICompliance {
+    function isSanctioned(address target) external view returns (bool);
+}
+
 contract MicroBenefitsVault {
     struct MemberAccount {
         uint256 healthInsuranceBalance;
@@ -25,11 +29,13 @@ contract MicroBenefitsVault {
     address public immutable usdcToken;
     address public owner;
     address public verifierAgent; // Authorized AI Agent/Oracle for validating medical bills
+    address public complianceRegistry;
 
     mapping(address => MemberAccount) public members;
     
     // Treasury holdings for global co-op insurance
     uint256 public insuranceCoopTreasury;
+
 
     event MemberRegistered(address indexed member);
     event ContributionDeposited(address indexed member, uint256 health, uint256 retirement, uint256 emergency);
@@ -46,10 +52,21 @@ contract MicroBenefitsVault {
         _;
     }
 
+    modifier onlyCleared(address account) {
+        if (complianceRegistry != address(0)) {
+            require(!ICompliance(complianceRegistry).isSanctioned(account), "Registry: Address Blocked");
+        }
+        _;
+    }
+
     constructor(address _usdcToken, address _verifierAgent) {
         usdcToken = _usdcToken;
         owner = msg.sender;
         verifierAgent = _verifierAgent;
+    }
+
+    function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
+        complianceRegistry = _complianceRegistry;
     }
 
     function updateVerifierAgent(address _newVerifier) external onlyOwner {
@@ -85,7 +102,7 @@ contract MicroBenefitsVault {
         uint256 health,
         uint256 retirement,
         uint256 emergency
-    ) external {
+    ) external onlyCleared(member) {
         require(members[member].isRegistered, "Member not registered");
         uint256 total = health + retirement + emergency;
         require(total > 0, "Deposit must be greater than 0");
@@ -119,7 +136,7 @@ contract MicroBenefitsVault {
         uint256 amount,
         string calldata claimType, // "HEALTH" or "PENSION" or "EMERGENCY"
         bytes32 claimHash // IPFS hash of invoice details
-    ) external onlyVerifier {
+    ) external onlyVerifier onlyCleared(member) {
         require(members[member].isRegistered, "Member not registered");
         MemberAccount storage acc = members[member];
 

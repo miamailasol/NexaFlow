@@ -13,6 +13,10 @@ interface IERC20 {
     function allowance(address owner, address spender) external view returns (uint256);
 }
 
+interface ICompliance {
+    function isSanctioned(address target) external view returns (bool);
+}
+
 contract StreamingPayroll {
     struct Stream {
         address employer;
@@ -28,10 +32,12 @@ contract StreamingPayroll {
     // USDC Address on Arc Chain: 0x3600000000000000000000000000000000000000
     address public immutable usdcToken;
     address public owner;
+    address public complianceRegistry;
 
     mapping(bytes32 => Stream) public streams;
     mapping(address => bytes32[]) public employeeStreams;
     mapping(address => bytes32[]) public employerStreams;
+
 
     event StreamCreated(bytes32 indexed streamId, address indexed employer, address indexed employee, uint256 flowRate, uint256 totalCap);
     event StreamUpdated(bytes32 indexed streamId, uint256 newFlowRate);
@@ -53,9 +59,20 @@ contract StreamingPayroll {
         _;
     }
 
+    modifier onlyCleared(address account) {
+        if (complianceRegistry != address(0)) {
+            require(!ICompliance(complianceRegistry).isSanctioned(account), "Registry: Address Blocked");
+        }
+        _;
+    }
+
     constructor(address _usdcToken) {
         usdcToken = _usdcToken;
         owner = msg.sender;
+    }
+
+    function setComplianceRegistry(address _complianceRegistry) external onlyOwner {
+        complianceRegistry = _complianceRegistry;
     }
 
     /**
@@ -68,7 +85,7 @@ contract StreamingPayroll {
         address employee,
         uint256 flowRate,
         uint256 totalCap
-    ) external returns (bytes32) {
+    ) external onlyCleared(employee) returns (bytes32) {
         require(employee != address(0), "Invalid employee address");
         require(flowRate > 0, "Flow rate must be positive");
         require(totalCap > 0, "Total cap must be positive");
@@ -122,7 +139,7 @@ contract StreamingPayroll {
     /**
      * @notice Withdraw available USDC stream funds.
      */
-    function withdrawFunds(bytes32 streamId) public onlyStreamEmployee(streamId) {
+    function withdrawFunds(bytes32 streamId) public onlyStreamEmployee(streamId) onlyCleared(streams[streamId].employee) {
         Stream storage stream = streams[streamId];
         require(stream.isActive, "Stream is not active");
 
@@ -216,6 +233,9 @@ contract StreamingPayroll {
             uint256 totalCap = totalCaps[i];
 
             require(employee != address(0), "Invalid employee address");
+            if (complianceRegistry != address(0)) {
+                require(!ICompliance(complianceRegistry).isSanctioned(employee), "Registry: Address Blocked");
+            }
             require(flowRate > 0, "Flow rate must be positive");
             require(totalCap > 0, "Total cap must be positive");
 
@@ -301,6 +321,9 @@ contract StreamingPayroll {
             bytes32 streamId = streamIds[i];
             Stream storage stream = streams[streamId];
             require(stream.employee == msg.sender, "Only stream employee can withdraw");
+            if (complianceRegistry != address(0)) {
+                require(!ICompliance(complianceRegistry).isSanctioned(stream.employee), "Registry: Address Blocked");
+            }
             require(stream.isActive, "Stream is not active");
 
             uint256 claimable = getClaimableAmount(streamId);
