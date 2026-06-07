@@ -105,6 +105,24 @@ contract MicroBenefitsVault {
     // ... depositContribution, processClaim (AI-Agent verified)
 }`;
 
+const getCountryCode = (loc) => {
+  if (!loc) return 'SG';
+  const str = loc.toUpperCase();
+  if (str.includes('SINGAPORE') || str.includes('SG')) return 'SG';
+  if (str.includes('BRAZIL') || str.includes('BR')) return 'BR';
+  if (str.includes('NIGERIA') || str.includes('NG')) return 'NG';
+  if (str.includes('TAIWAN') || str.includes('TW')) return 'TW';
+  return 'SG';
+};
+
+const getTaxRateBps = (loc) => {
+  const code = getCountryCode(loc);
+  if (code === 'BR') return 1500;
+  if (code === 'NG') return 1000;
+  if (code === 'TW') return 1800;
+  return 0;
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showOnboarding, setShowOnboarding] = useState(true)
@@ -1096,7 +1114,7 @@ function App() {
           address: STREAMING_PAYROLL_ADDRESS,
           abi: STREAMING_PAYROLL_ABI,
           functionName: 'createPrivateStream',
-          args: [newEmployeeAddress, commitmentHash, totalCapRaw]
+          args: [newEmployeeAddress, commitmentHash, totalCapRaw, getCountryCode(newEmployeeLoc)]
         })
 
         triggerToast('Transaction Submitted', 'Waiting for private stream finalization on Arc...')
@@ -1149,7 +1167,7 @@ function App() {
           address: STREAMING_PAYROLL_ADDRESS,
           abi: STREAMING_PAYROLL_ABI,
           functionName: 'createStream',
-          args: [newEmployeeAddress, flowRateRaw, totalCapRaw]
+          args: [newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)]
         })
 
         triggerToast('Transaction Submitted', 'Waiting for sub-second block finalization on Arc...')
@@ -1255,7 +1273,7 @@ function App() {
 
   // Download CSV template
   const downloadCsvTemplate = () => {
-    const csvContent = "Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.002,500,Alice Smith,UI Designer\n";
+    const csvContent = "Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role,Country\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer,Singapore\n0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.002,500,Alice Smith,UI Designer,Brazil\n";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1287,6 +1305,7 @@ function App() {
       const totalCap = parseFloat(cols[2].trim());
       const name = cols[3] ? cols[3].trim() : `Worker ${i}`;
       const role = cols[4] ? cols[4].trim() : 'Engineer';
+      const location = cols[5] ? cols[5].trim() : 'Singapore 🇸🇬';
 
       if (!address.startsWith('0x') || address.length !== 42) {
         setCsvError(`Line ${i + 1}: Invalid Ethereum Address (${address})`);
@@ -1301,7 +1320,7 @@ function App() {
         return;
       }
 
-      workers.push({ address, flowRate, totalCap, name, role });
+      workers.push({ address, flowRate, totalCap, name, role, location });
     }
 
     if (workers.length === 0) {
@@ -1347,6 +1366,7 @@ function App() {
       const employeesArr = parsedWorkers.map(w => w.address);
       const flowRatesArr = parsedWorkers.map(w => parseUnits(w.flowRate.toString(), 6));
       const totalCapsArr = parsedWorkers.map(w => parseUnits(w.totalCap.toString(), 6));
+      const countriesArr = parsedWorkers.map(w => getCountryCode(w.location));
 
       triggerToast('Broadcasting Batch', `Submitting createStreamsBatch for ${parsedWorkers.length} workers...`);
 
@@ -1354,7 +1374,7 @@ function App() {
         address: STREAMING_PAYROLL_ADDRESS,
         abi: STREAMING_PAYROLL_ABI,
         functionName: 'createStreamsBatch',
-        args: [employeesArr, flowRatesArr, totalCapsArr]
+        args: [employeesArr, flowRatesArr, totalCapsArr, countriesArr]
       });
 
       triggerToast('Transaction Submitted', 'Waiting for on-chain block confirmation...');
@@ -1383,7 +1403,7 @@ function App() {
           id: streamId,
           name: w.name,
           role: w.role,
-          location: 'Remote 🌐',
+          location: w.location || 'Singapore 🇸🇬',
           address: w.address,
           flowRate: w.flowRate,
           totalCap: w.totalCap,
@@ -1933,6 +1953,12 @@ function App() {
   // Global calculations
   const totalStreamedUSDC = employees.reduce((acc, emp) => acc + emp.accruedLive, 0)
   const activeCount = employees.filter((emp) => emp.isActive).length
+  const totalAccruedTax = employees.reduce((acc, emp) => {
+    if (!emp.isActive) return acc;
+    const rate = getTaxRateBps(emp.location);
+    const accrued = emp.accruedLive - emp.accruedPaid;
+    return acc + (accrued > 0 ? (accrued * rate) / 10000 : 0);
+  }, 0);
 
   // Onboarding progress variables
   const step1Done = isConnected;
@@ -2576,9 +2602,29 @@ function App() {
 
             {/* Recent On-Chain Ledger */}
             <div className="panel-card">
-              <div className="panel-card-title">
-                <Layers size={18} color="var(--color-warning)" />
-                Recent Payment Ledger (Permanently Recorded)
+              <div className="panel-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="var(--color-warning)" />
+                  <span>Recent Payment Ledger (Permanently Recorded)</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  border: '1.5px solid var(--color-error)',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontFamily: 'var(--font-mono)'
+                }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                    Accrued Tax Withholding (Live):
+                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--color-error)' }} className="ticking-tax-val">
+                    {totalAccruedTax.toFixed(6)} USDC
+                  </span>
+                  <span className="live-pulse" style={{ backgroundColor: 'var(--color-error)', width: '6px', height: '6px', marginLeft: '0px' }}></span>
+                </div>
               </div>
               <div className="table-container">
                 <table className="data-table">
@@ -2694,6 +2740,31 @@ function App() {
                       <option value="Taiwan 🇹🇼">Taiwan 🇹🇼 (TWD)</option>
                     </select>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Jurisdiction for automated tax reserve routing.</div>
+                    {getCountryCode(newEmployeeLoc) !== 'SG' && (
+                      <div className="tax-warning-banner" style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        display: 'flex',
+                        alignItems: 'start',
+                        gap: '10px'
+                      }}>
+                        <span style={{ fontSize: '16px', lineHeight: '1' }}>⚠️</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '600', color: '#f87171' }}>
+                            Jurisdictional Withholding Required
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#fca5a5', lineHeight: '1.4' }}>
+                            Streams in this region are subject to a {
+                              getCountryCode(newEmployeeLoc) === 'BR' ? '15%' :
+                              getCountryCode(newEmployeeLoc) === 'NG' ? '10%' : '18%'
+                            } local tax withholding rate. Splitting will occur automatically on withdrawal.
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group form-limit">
@@ -2819,7 +2890,7 @@ function App() {
                       className="form-input"
                       rows={5}
                       style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', resize: 'vertical' }}
-                      placeholder="Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer"
+                      placeholder="Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role,Country&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer,Singapore&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.002,500,Alice Smith,UI Designer,Brazil"
                       value={csvText}
                       onChange={(e) => {
                         setCsvText(e.target.value);
@@ -2827,7 +2898,7 @@ function App() {
                       }}
                     />
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                      Columns format: Address, FlowRate, Cap, Name, Role (includes Header row).
+                      Columns format: Address, FlowRate, Cap, Name, Role, Country (includes Header row).
                     </div>
                   </div>
 
