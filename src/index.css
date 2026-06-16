@@ -1952,3 +1952,95 @@ select.form-input {
   border-collapse: collapse;
 }
 
+/* Public Pages Responsive Grids */
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 40px;
+  align-items: center;
+  max-width: 1200px;
+  width: 100%;
+  margin: 60px auto 40px;
+  padding: 0 24px;
+}
+
+.landing-features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.landing-roi-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+.contact-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 40px;
+  text-align: left;
+  max-width: 900px;
+  width: 100%;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+
+.docs-main-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 40px;
+  text-align: left;
+  max-width: 1100px;
+  width: 100%;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+
+.about-values-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* Responsive Overrides for Public Grids */
+@media (max-width: 1024px) {
+  .landing-hero {
+    grid-template-columns: 1fr !important;
+    margin: 40px auto !important;
+    gap: 30px !important;
+  }
+  
+  .landing-features-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .landing-roi-grid {
+    grid-template-columns: 1fr !important;
+    gap: 30px !important;
+  }
+
+  .contact-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 30px !important;
+  }
+
+  .docs-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 30px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-features-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .about-values-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
