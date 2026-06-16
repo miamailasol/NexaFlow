@@ -25,7 +25,7 @@ export default function LegalPages({ mode, onLaunchApp, navigateTo }) {
         zIndex: 1000,
         padding: '16px 40px',
         display: 'flex',
-        justifyContent: 'between',
+        justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: '16px'

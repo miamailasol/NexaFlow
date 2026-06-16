@@ -41,7 +41,7 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
         zIndex: 1000,
         padding: '16px 40px',
         display: 'flex',
-        justifyContent: 'between',
+        justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: '16px'
@@ -187,7 +187,7 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
               animation: 'scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--color-success)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: 'var(--thin-border)' }}>
+                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--color-success)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--thin-border)' }}>
                   <Check size={16} color="var(--text-main)" />
                 </div>
               </div>
