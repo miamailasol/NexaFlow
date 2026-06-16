@@ -15,7 +15,8 @@ import {
   Code,
   Lock,
   ChevronRight,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 
 export default function LandingPage({ onLaunchApp, navigateTo }) {
@@ -28,6 +29,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
   const [hsaPercent, setHsaPercent] = useState(15);
   const [pensionPercent, setPensionPercent] = useState(10);
   const [activeFeature, setActiveFeature] = useState(0);
+  const [selectedFeature, setSelectedFeature] = useState(null);
 
   // Simulated continuous ticking salary payroll counter
   useEffect(() => {
@@ -58,25 +60,85 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
       title: "Real-time Salaries",
       desc: "Stop waiting 30 days for payroll checks. Workers earn and claim compensation every single second in USDC.",
       color: "var(--color-primary)",
-      icon: <DollarSign size={20} />
+      icon: <DollarSign size={20} />,
+      details: {
+        headline: "Continuous Stream Settlement",
+        concept: "NexaFlow bypasses traditional banking batch-processing. Your earnings accrue on-chain per second, giving you instant liquidity.",
+        techSpecs: [
+          { label: "Blockchain Rails", value: "Arc L2 Chain (Native USDC Gas)" },
+          { label: "Claim Delay", value: "0 seconds (Continuous pull)" },
+          { label: "Average Fee", value: "< 0.01 USDC per claim" }
+        ],
+        howItWorks: [
+          "Employer deposits USDC into the non-custodial StreamingPayroll registry contract.",
+          "Smart contract calculates worker balance in real-time based on the flow rate (USDC/sec).",
+          "Worker claims accrued salary at any moment, paying gas directly in USDC on Arc."
+        ],
+        advantage: "Ensures continuous cash flow for employees while eliminating payroll delay and reducing corporate capital lockups."
+      }
     },
     {
       title: "Embedded HSA splits",
       desc: "Specify percentage diversions into health savings accounts. 80% goes to your personal vault, 20% to community pool.",
       color: "var(--color-success)",
-      icon: <HeartHandshake size={20} />
+      icon: <HeartHandshake size={20} />,
+      details: {
+        headline: "Automated On-Chain Health Protection",
+        concept: "Diversify a percentage of your per-second wage stream into a smart contract-managed Health Savings Account.",
+        techSpecs: [
+          { label: "Yield Engine", value: "Aave USDC Pool Integration" },
+          { label: "Personal Share", value: "80% locked to personal vault" },
+          { label: "Co-op safety", value: "20% to community emergency pool" }
+        ],
+        howItWorks: [
+          "Define your target HSA split percentage (e.g. 15%) in your employee settings.",
+          "Every second, the payroll contract splits the stream and routes USDC to your HSA vaults.",
+          "HSA funds generate organic stablecoin yield while awaiting clinical reimbursement claims."
+        ],
+        advantage: "Builds a robust healthcare safety net organically with every second you work, backed by community-shared co-op pools."
+      }
     },
     {
       title: "AI Verifier Claims",
       desc: "Upload a clinic invoice and our sandboxed AI agent verifies signature and claims payouts in USDC instantly.",
       color: "var(--color-secondary)",
-      icon: <Zap size={20} />
+      icon: <Zap size={20} />,
+      details: {
+        headline: "Decoupled Agentic Clinical Verification",
+        concept: "Submit medical invoices for instant co-op reimbursement. Powered by autonomous AI agents that analyze, verify, and settle payouts.",
+        techSpecs: [
+          { label: "Agent Stack", value: "LangChain & LangGraph Orchestrator" },
+          { label: "Verification Time", value: "Under 5 seconds (Real-time)" },
+          { label: "Fraud Check", value: "On-chain signer verification" }
+        ],
+        howItWorks: [
+          "Upload your digital clinic invoice (detailing treatment codes, costs, and clinic signature).",
+          "NexaFlow's AI agent parses the receipt, checks treatment compliance, and screens for fraud.",
+          "Once verified, the agent signs a cryptographic clearance triggering instant USDC payout from the pool."
+        ],
+        advantage: "Eliminates weeks of insurance review bureaucracy, replacing it with secure, instant, and automated AI settlement."
+      }
     },
     {
       title: "Biometric Passkeys",
       desc: "ERC-4337 smart wallets allow workers to claim accrued salaries gas-free using FaceID / TouchID biometric enclaves.",
       color: "var(--color-warning)",
-      icon: <Fingerprint size={20} />
+      icon: <Fingerprint size={20} />,
+      details: {
+        headline: "Institutional Cryptographic Security",
+        concept: "Experience web3 without seed phrases, extensions, or passwords. Secure your payroll using your device's built-in biometric enclaves.",
+        techSpecs: [
+          { label: "Wallet Standard", value: "ERC-4337 Account Abstraction" },
+          { label: "Signer Tech", value: "WebAuthn & Secp256r1 Enclaves" },
+          { label: "Gas Sponsorship", value: "Paymaster-enabled (Free claims)" }
+        ],
+        howItWorks: [
+          "Create a smart wallet in 2 seconds utilizing FaceID, TouchID, or Android Biometrics.",
+          "The hardware enclave securely generates and stores your private credentials locally.",
+          "Sign payroll claims with a single biometric touch, sponsored by NexaFlow paymasters on Arc."
+        ],
+        advantage: "Provides bulletproof security, zero UX friction, and total protection against phishing and private key theft."
+      }
     }
   ];
 
@@ -308,7 +370,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
               minHeight: '220px',
               cursor: 'pointer'
             }}
-            onClick={() => setActiveFeature(i)}
+            onClick={() => setSelectedFeature(f)}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = f.color;
             }}
@@ -691,6 +753,153 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
           </div>
         </div>
       </footer>
+      {/* Feature Explanation Modal Overlay */}
+      {selectedFeature && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+          animation: 'fade-in 0.2s ease-out'
+        }} onClick={() => setSelectedFeature(null)}>
+          <div style={{
+            backgroundColor: '#FFF',
+            border: '4px solid #000',
+            borderRadius: '16px',
+            boxShadow: '10px 10px 0px #000',
+            maxWidth: '650px',
+            width: '100%',
+            padding: '32px',
+            position: 'relative',
+            textAlign: 'left',
+            animation: 'scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Close Button */}
+            <button 
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                backgroundColor: '#FFF',
+                border: '2px solid #000',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '2px 2px 0px #000',
+                transition: 'all 0.1s'
+              }}
+              onClick={() => setSelectedFeature(null)}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translate(-1px, -1px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+            >
+              <X size={16} />
+            </button>
+
+            {/* Header Info */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+              <div style={{
+                width: '44px',
+                height: '44px',
+                backgroundColor: selectedFeature.color,
+                border: '3px solid #000',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '3px 3px 0px #000'
+              }}>
+                {selectedFeature.icon}
+              </div>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>FEATURE DEEP DIVE</span>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: '900', textTransform: 'uppercase', color: 'var(--text-main)', marginTop: '2px' }}>
+                  {selectedFeature.title}
+                </h3>
+              </div>
+            </div>
+
+            {/* Main Concept */}
+            <div style={{
+              backgroundColor: 'rgba(26,26,26,0.03)',
+              border: '2px dashed #000',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '24px'
+            }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '6px' }}>
+                {selectedFeature.details.headline}
+              </h4>
+              <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.6', fontWeight: '500' }}>
+                {selectedFeature.details.concept}
+              </p>
+            </div>
+
+            {/* Tech Specs */}
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                Technical Specifications
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                {selectedFeature.details.techSpecs.map((spec, idx) => (
+                  <div key={idx} style={{
+                    backgroundColor: '#FFF',
+                    border: '2px solid #000',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    boxShadow: '2px 2px 0px #000'
+                  }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{spec.label}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: selectedFeature.color === 'var(--color-primary)' ? 'var(--color-primary)' : 'var(--text-main)', marginTop: '2px' }}>{spec.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* How It Works */}
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                Workflow Execution
+              </h4>
+              <ul style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {selectedFeature.details.howItWorks.map((step, idx) => (
+                  <li key={idx} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5', fontWeight: '500' }}>
+                    {step}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Action / Advantage */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', paddingTop: '16px', borderTop: '2px dashed rgba(0,0,0,0.1)' }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', maxWidth: '350px', margin: 0 }}>
+                ⚡ {selectedFeature.details.advantage}
+              </p>
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  setSelectedFeature(null);
+                  onLaunchApp();
+                }}
+                style={{ padding: '10px 20px', fontSize: '12px' }}
+              >
+                Launch Playground
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
