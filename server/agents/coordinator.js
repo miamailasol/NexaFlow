@@ -52,7 +52,12 @@ initAgentBudget("benefits", 10000);
 initAgentBudget("settlement", 100000);
 
 // ─── Model Configuration ───────────────────────────────────────────
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "demo-key";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+if (!OPENAI_API_KEY) {
+  console.error("❌ OPENAI_API_KEY is required. Set it in your .env file for real AI agent inference.");
+  console.error("   Get a key at https://platform.openai.com/api-keys");
+  process.exit(1);
+}
 
 function createAgentModel(agentName, tools) {
   const model = new ChatOpenAI({

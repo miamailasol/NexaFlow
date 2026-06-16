@@ -22,7 +22,7 @@ const paymentLedger = [];
 const balances = new Map(); // buyerAddress => remaining USDC balance
 
 /**
- * Initialize a buyer's nanopayment balance (simulates Gateway Wallet deposit)
+ * Initialize a buyer's nanopayment balance (in-memory ledger; production uses Circle Gateway Wallet)
  */
 export function depositNanopaymentBalance(buyerAddress, amountUsdc) {
   const current = balances.get(buyerAddress.toLowerCase()) || 0;
