@@ -33,6 +33,13 @@ import {
   Sliders
 } from 'lucide-react'
 import './App.css'
+import AgentCommandCenter from './components/AgentCommandCenter'
+import LandingPage from './components/LandingPage'
+import DocsPage from './components/DocsPage'
+import FaqPage from './components/FaqPage'
+import AboutPage from './components/AboutPage'
+import ContactPage from './components/ContactPage'
+import LegalPages from './components/LegalPages'
 
 // Web3 Imports
 import { ConnectButton } from '@rainbow-me/rainbowkit'
@@ -139,6 +146,54 @@ const getTaxRateBps = (loc) => {
 };
 
 function App() {
+  const [route, setRoute] = useState(() => {
+    const hash = window.location.hash;
+    if (hash === '#/app') return 'app';
+    if (hash === '#/docs') return 'docs';
+    if (hash === '#/faq') return 'faq';
+    if (hash === '#/about') return 'about';
+    if (hash === '#/privacy') return 'privacy';
+    if (hash === '#/terms') return 'terms';
+    if (hash === '#/contact') return 'contact';
+    return 'home';
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash === '#/app') {
+        setRoute('app');
+      } else if (hash === '#/docs') {
+        setRoute('docs');
+      } else if (hash === '#/faq') {
+        setRoute('faq');
+      } else if (hash === '#/about') {
+        setRoute('about');
+      } else if (hash === '#/privacy') {
+        setRoute('privacy');
+      } else if (hash === '#/terms') {
+        setRoute('terms');
+      } else if (hash === '#/contact') {
+        setRoute('contact');
+      } else {
+        setRoute('home');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigateTo = (path) => {
+    if (path === 'app') window.location.hash = '#/app';
+    else if (path === 'docs') window.location.hash = '#/docs';
+    else if (path === 'faq') window.location.hash = '#/faq';
+    else if (path === 'about') window.location.hash = '#/about';
+    else if (path === 'privacy') window.location.hash = '#/privacy';
+    else if (path === 'terms') window.location.hash = '#/terms';
+    else if (path === 'contact') window.location.hash = '#/contact';
+    else window.location.hash = '#/';
+  };
+
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showOnboarding, setShowOnboarding] = useState(true)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -3134,6 +3189,28 @@ function App() {
   const completedSteps = [step1Done, step2Done, step3Done, step4Done].filter(Boolean).length;
   const onboardingProgressPercent = completedSteps * 25;
 
+  if (route === 'home') {
+    return <LandingPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'docs') {
+    return <DocsPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'faq') {
+    return <FaqPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'about') {
+    return <AboutPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'contact') {
+    return <ContactPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'privacy') {
+    return <LegalPages mode="privacy" onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+  if (route === 'terms') {
+    return <LegalPages mode="terms" onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+  }
+
   return (
     <div className="app-container">
       {/* Toast Alert Notification */}
@@ -3148,7 +3225,7 @@ function App() {
 
       {/* Mobile Top Navbar Header (Visible only on mobile/tablet <= 1024px) */}
       <div className="mobile-navbar">
-        <div className="mobile-brand">
+        <div className="mobile-brand" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
           <div style={{ 
             width: '32px', 
             height: '32px', 
@@ -3175,7 +3252,7 @@ function App() {
       {/* Sidebar Navigation */}
       <aside className={`sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
         <div>
-          <div className="brand-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="brand-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => navigateTo('home')}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div className="brand-logo">
                 <Zap size={20} color="var(--text-main)" fill="var(--text-main)" />
@@ -3217,6 +3294,15 @@ function App() {
               >
                 <Activity size={18} />
                 Overview Dashboard
+              </a>
+            </li>
+            <li className="nav-item">
+              <a
+                className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('agents'); setIsMobileSidebarOpen(false); }}
+              >
+                <Cpu size={18} />
+                Agent Command Center
               </a>
             </li>
             <li className="nav-item">
@@ -5498,6 +5584,11 @@ function App() {
 
             </div>
           </div>
+        )}
+
+        {/* Agent Command Center Tab */}
+        {activeTab === 'agents' && (
+          <AgentCommandCenter />
         )}
 
         {/* Biometric Smart Wallet Tab */}
