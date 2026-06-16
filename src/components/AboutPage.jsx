@@ -26,7 +26,7 @@ export default function AboutPage({ onLaunchApp, navigateTo }) {
   return (
     <div style={{
       width: '100%',
-      minHeight: '100vh',
+      height: '100vh',
       backgroundColor: 'var(--bg-main)',
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
