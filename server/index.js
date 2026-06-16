@@ -330,107 +330,44 @@ app.get(
 );
 
 // ═════════════════════════════════════════════════════════════════════
-// DEMO ENDPOINTS (For hackathon demo — pre-seeded data)
+// CLAIM PROCESSING ENDPOINT (Real — requires OPENAI_API_KEY)
 // ═════════════════════════════════════════════════════════════════════
 
 /**
- * POST /api/demo/seed — Pre-seed demo data for judges
+ * POST /api/agent/process-claim — Process claim via real LangGraph agents
+ * 
+ * Unlike the x402-protected endpoints, this endpoint does not charge
+ * per-request. It is intended for direct integration testing and
+ * hackathon demo flows where the caller provides their own invoice data.
  */
-app.post("/api/demo/seed", (req, res) => {
-  // Seed nanopayment balances for demo wallets
-  const demoWallets = [
-    { address: "0xCA2DE969C3266f530a27bE3B46EC0550cF609c67", amount: 100 },
-    { address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", amount: 50 },
-    { address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", amount: 25 },
-  ];
-
-  demoWallets.forEach(({ address, amount }) => {
-    depositNanopaymentBalance(address, amount);
-  });
-
-  // Simulate some past nanopayment transactions
-  const demoPayments = [
-    { buyer: demoWallets[0].address, resource: "Claim verification #1042", amount: 0.001 },
-    { buyer: demoWallets[0].address, resource: "Compliance check #893", amount: 0.0005 },
-    { buyer: demoWallets[1].address, resource: "Payroll analytics report", amount: 0.01 },
-    { buyer: demoWallets[0].address, resource: "Claim verification #1043", amount: 0.001 },
-    { buyer: demoWallets[2].address, resource: "Stream creation #17", amount: 0.005 },
-  ];
-
-  // Record simulated payments (without actually going through x402)
-  demoPayments.forEach((p) => {
-    const ledger = getNanopaymentLedger();
-    // We push directly to avoid circular dependency
-  });
-
-  res.json({
-    success: true,
-    message: "Demo data seeded successfully",
-    wallets: demoWallets.map((w) => ({
-      ...w,
-      balance: getNanopaymentBalance(w.address),
-    })),
-    stats: getNanopaymentStats(),
-  });
-});
-
-/**
- * POST /api/demo/process-claim — Quick demo claim (no x402 required)
- */
-app.post("/api/demo/process-claim", async (req, res) => {
+app.post("/api/agent/process-claim", async (req, res) => {
   try {
-    const invoiceText = req.body.invoiceText || `
-      METROPOLITAN HEALTHCARE & CLINIC
-      Patient: Demo Employee
-      Date: ${new Date().toLocaleDateString()}
-      Service: General Health Checkup
-      Subtotal: $95.00
-      Tax: $5.00
-      Total: $100.00
-      Paid in full. Hospital ID: demo_provider_001
-    `;
+    const { invoiceText, memberAddress, claimAmount } = req.body;
 
-    const memberAddress = req.body.memberAddress || "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-    const claimAmount = req.body.claimAmount || 100;
+    if (!invoiceText || !memberAddress || !claimAmount) {
+      return res.status(400).json({
+        error: "Missing required fields: invoiceText, memberAddress, claimAmount",
+        example: {
+          invoiceText: "METRO HEALTHCARE CLINIC\\nPatient: John Doe\\nService: Checkup\\nTotal: $100.00",
+          memberAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+          claimAmount: 100,
+        },
+      });
+    }
 
     const result = await processClaimWithAgents(invoiceText, memberAddress, claimAmount);
 
     res.json({
       success: true,
       result,
-      message: "Demo claim processed — no x402 payment required (demo mode)",
+      message: "Claim processed through real multi-agent LangGraph pipeline",
     });
   } catch (error) {
-    // If OpenAI key is missing, return a simulated result
-    const simulatedResult = {
-      messages: [
-        {
-          role: "system",
-          content: "Demo mode: LangGraph agents simulated (add OPENAI_API_KEY for live AI)",
-        },
-        {
-          role: "coordinator",
-          content: JSON.stringify({
-            action: "CLAIM_PROCESSED",
-            claimAmount: req.body.claimAmount || 100,
-            memberAddress: req.body.memberAddress || "0x70997970C...",
-            agentDecisions: {
-              compliance: { status: "APPROVED", riskScore: 5 },
-              verification: { status: "VERIFIED", confidence: 0.94, riskLevel: "LOW" },
-              settlement: { status: "PAID", txHash: "0x" + "a".repeat(64) },
-              reputation: { status: "RECORDED", score: 95, tag: "successful_verification" },
-            },
-          }),
-        },
-      ],
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      hint: "Ensure OPENAI_API_KEY is set in .env for real AI agent inference",
       activityLog: getAgentActivityLog().slice(-10),
-    };
-
-    res.json({
-      success: true,
-      result: simulatedResult,
-      message: "Demo mode — simulated agent response (add OPENAI_API_KEY for live AI)",
-      demoMode: true,
     });
   }
 });
