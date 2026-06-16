@@ -31,6 +31,7 @@ export default function AboutPage({ onLaunchApp, navigateTo }) {
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
       overflowY: 'auto',
+      overflowX: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -93,7 +94,7 @@ export default function AboutPage({ onLaunchApp, navigateTo }) {
         </section>
 
         {/* Core Values Grid */}
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+        <section className="about-values-grid">
           {coreValues.map((val, idx) => (
             <div key={idx} className="panel-card" style={{ 
               backgroundColor: '#FFF', 

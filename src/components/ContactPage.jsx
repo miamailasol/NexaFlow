@@ -28,6 +28,7 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
       overflowY: 'auto',
+      overflowX: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -73,7 +74,7 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
       </header>
 
       {/* Main Grid */}
-      <main style={{ maxWidth: '900px', width: '100%', margin: '40px auto', padding: '0 24px', display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '40px', textAlign: 'left' }}>
+      <main className="contact-main-grid">
         
         {/* Support channels info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

@@ -88,6 +88,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
       overflowY: 'auto',
+      overflowX: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -135,7 +136,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
       </header>
 
       {/* Hero Section */}
-      <section style={{ maxWidth: '1200px', width: '100%', margin: '60px auto 40px', padding: '0 24px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '40px', alignItems: 'center' }}>
+      <section className="landing-hero">
         <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: '8px', padding: '6px 12px', backgroundColor: 'var(--color-primary)', border: 'var(--thin-border)', borderRadius: '20px', boxShadow: '2px 2px 0px #000' }}>
             <Sparkles size={14} color="var(--text-main)" />
@@ -243,7 +244,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
           </h2>
         </div>
 
-        <div className="table-container" style={{ border: 'var(--thick-border)', boxShadow: 'var(--shadow-flat-lg)', overflow: 'hidden' }}>
+        <div className="table-container" style={{ border: 'var(--thick-border)', boxShadow: 'var(--shadow-flat-lg)', overflowX: 'auto', overflowY: 'hidden' }}>
           <table className="data-table">
             <thead>
               <tr>
@@ -292,7 +293,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+        <div className="landing-features-grid">
           {features.map((f, i) => (
             <div key={i} className="stats-card" style={{ 
               backgroundColor: '#FFF', 
@@ -359,7 +360,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '40px', alignItems: 'start' }}>
+          <div className="landing-roi-grid">
             {/* Input Controls */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
               <div className="form-group">

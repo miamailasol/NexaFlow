@@ -61,6 +61,7 @@ export default function FaqPage({ onLaunchApp, navigateTo }) {
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
       overflowY: 'auto',
+      overflowX: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     }}>

@@ -100,6 +100,7 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
       backgroundImage: 'linear-gradient(rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1.5px, transparent 1.5px)',
       backgroundSize: '28px 28px',
       overflowY: 'auto',
+      overflowX: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -145,7 +146,7 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
       </header>
 
       {/* Main content grid */}
-      <main style={{ maxWidth: '1100px', width: '100%', margin: '40px auto', padding: '0 24px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: '40px', textAlign: 'left' }}>
+      <main className="docs-main-grid">
         
         {/* Sidebar Nav */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '90px', height: 'fit-content' }}>
@@ -196,7 +197,7 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '2.5px dashed #000', paddingBottom: '10px', marginBottom: '16px' }}>
               Smart Contract Registry
             </h2>
-            <div className="table-container" style={{ border: 'var(--medium-border)', borderRadius: '8px', overflow: 'hidden', marginTop: '12px' }}>
+            <div className="table-container" style={{ border: 'var(--medium-border)', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', marginTop: '12px' }}>
               <table className="data-table">
                 <thead>
                   <tr>
