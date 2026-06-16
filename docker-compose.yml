@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  nexaflow-backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: nexaflow-backend
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      - nexaflow-dcw-data:/app/scripts
+    restart: unless-stopped
+
+  nexaflow-frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: nexaflow-frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    depends_on:
+      - nexaflow-backend
+
+volumes:
+  nexaflow-dcw-data:
+    driver: local

@@ -7,19 +7,26 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node --env-file=.env server/index.js",
+    "dev:all": "npx concurrently \"npm run dev\" \"npm run server\""
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "^10.6.0",
+    "@langchain/core": "^1.1.49",
+    "@langchain/langgraph": "^1.4.2",
+    "@langchain/openai": "^1.4.7",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "^5.100.11",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "langsmith": "^0.7.8",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "viem": "^2.50.4",
-    "wagmi": "^2.19.5"
+    "wagmi": "^2.19.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
