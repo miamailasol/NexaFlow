@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, ArrowLeft, Send, Check, HeartHandshake, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Zap, ArrowLeft, Send, Check, HeartHandshake, HelpCircle, ShieldAlert, ChevronRight, BookOpen } from 'lucide-react';
 
 export default function ContactPage({ onLaunchApp, navigateTo }) {
   const [topic, setTopic] = useState('integration');
@@ -73,8 +73,15 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
         </div>
       </header>
 
+      {/* Breadcrumbs */}
+      <div className="breadcrumb-container">
+        <span className="breadcrumb-item" onClick={() => navigateTo('home')}>Home</span>
+        <span className="breadcrumb-separator"><ChevronRight size={10} /></span>
+        <span className="breadcrumb-item active">Support Inquiry</span>
+      </div>
+
       {/* Main Grid */}
-      <main className="contact-main-grid">
+      <main className="contact-main-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '32px', maxWidth: '1000px', width: '100%', margin: '40px auto', padding: '0 24px' }}>
         
         {/* Support channels info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -204,6 +211,69 @@ export default function ContactPage({ onLaunchApp, navigateTo }) {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Related Pages Section */}
+        <div className="related-section" style={{ gridColumn: '1 / -1' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '900', textTransform: 'uppercase', color: 'var(--text-main)', marginBottom: '8px' }}>
+            Related Resources
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            Learn more about the technology stack and operations of NexaFlow.
+          </p>
+          
+          <div className="related-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+            <div className="related-card" onClick={() => navigateTo('docs')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  <BookOpen size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>API Guide</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>DEVELOPER DOCUMENTATION</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Access integration snippets, ABI specs, smart contract registers, and the native USDC gas mechanics of Arc Chain.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Read Docs</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('faq')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '8px' }}>
+                  <HelpCircle size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Common Questions</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>FAQ HELPDESK</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Learn about biometric TouchID/FaceID enclaves, gas sponsorship mechanisms on the Arc L2 chain, and co-op staking metrics.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-success)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Browse FAQ</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('about')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-secondary)', marginBottom: '8px' }}>
+                  <HeartHandshake size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Our Mission</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>PHILOSOPHY & VALUES</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Learn about our decentralized benefits thesis, target demographics, and why continuous finance is essential for remote teams.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-secondary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>View About Us</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+          </div>
         </div>
 
       </main>

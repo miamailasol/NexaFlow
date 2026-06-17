@@ -745,7 +745,7 @@ select.form-input {
   display: flex;
   align-items: center;
   gap: 16px;
-  width: 25%;
+  width: 100%;
 }
 
 .avatar {
@@ -761,6 +761,7 @@ select.form-input {
   font-weight: 900;
   color: var(--text-main);
   box-shadow: 2px 2px 0px #1A1A1A;
+  flex-shrink: 0;
 }
 
 .engineer-details h4 {
@@ -2047,4 +2048,296 @@ select.form-input {
   }
 }
 
+/* ==============================================================================
+   NEXAFLOW RESPONSIVE & MOBILE NAVIGATION OVERHAUL
+   ============================================================================== */
 
+/* Table Scroll Wrapper */
+.table-responsive-container,
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: var(--thin-border);
+  border-radius: 8px;
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow-flat-sm);
+  margin-bottom: 16px;
+}
+
+/* iOS & Android Safe Area Padding Adjustments */
+.mobile-navbar {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+}
+
+.sidebar {
+  padding-top: calc(24px + env(safe-area-inset-top, 0px)) !important;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Touch Targets according to Apple/Google Guidelines */
+.sidebar-nav-item,
+.menu-toggle-btn,
+.mobile-close-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Mobile Bottom Navigation Bar */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background-color: var(--bg-sidebar);
+  border-top: var(--thick-border);
+  z-index: 997;
+  justify-content: space-around;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  gap: 4px;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-height: 48px;
+  min-width: 48px;
+  transition: all var(--transition-fast);
+}
+
+.mobile-bottom-nav-item:hover,
+.mobile-bottom-nav-item.active {
+  color: var(--color-success);
+}
+
+.mobile-bottom-nav-item span {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 1024px) {
+  .mobile-bottom-nav {
+    display: flex;
+  }
+  
+  .main-content {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* ==============================================================================
+   NEXAFLOW LOADING SYSTEM (SKELETONS, SHIMMER, SPINNERS, TRANSITIONS)
+   ============================================================================== */
+
+/* Shimmer Animation Keyframe */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Pulse Animation Keyframe */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Spinner Keyframe */
+@keyframes spin-loader {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shimmer Base */
+.shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.10) 37%,
+    rgba(255, 255, 255, 0.03) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+
+/* Respect user preferences regarding motion */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-bg {
+    animation: pulse-soft 2s infinite ease-in-out;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .spinner-icon {
+    animation: pulse-soft 1.5s infinite ease-in-out !important;
+  }
+}
+
+/* Skeletons */
+.skeleton-box {
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.05);
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.skeleton-text {
+  height: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.skeleton-text.heading {
+  height: 20px;
+  width: 60%;
+  margin-bottom: 16px;
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.skeleton-btn {
+  height: 40px;
+  width: 120px;
+  border-radius: 6px;
+}
+
+/* Card Skeleton Block */
+.skeleton-card {
+  border: var(--medium-border);
+  border-radius: 12px;
+  background-color: var(--bg-card);
+  padding: 20px;
+  box-shadow: var(--shadow-flat-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Inline Spinner for Buttons */
+.spinner-icon {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--text-main);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin-loader 0.8s infinite linear;
+  vertical-align: middle;
+}
+
+.btn-secondary .spinner-icon,
+.btn-outline .spinner-icon {
+  border-top-color: #fff;
+}
+
+/* Page Fade-In Transition class */
+.fade-in-route {
+  animation: routeFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes routeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Breadcrumb & Navigation Overhaul Styles */
+.breadcrumb-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 40px;
+  background-color: #FBFBFE;
+  border-bottom: var(--medium-border);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.breadcrumb-item {
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumb-item:hover {
+  color: var(--color-primary);
+}
+
+.breadcrumb-item.active {
+  color: var(--text-main);
+  cursor: default;
+}
+
+.breadcrumb-separator {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+/* Related Content Section */
+.related-section {
+  border-top: 2px dashed var(--border-color);
+  padding: 40px 0 20px;
+  margin-top: 40px;
+}
+
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.related-card {
+  background-color: #FFF;
+  border: var(--medium-border);
+  box-shadow: var(--shadow-flat-sm);
+  padding: 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.related-card:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: var(--shadow-flat);
+  border-color: var(--color-primary);
+}

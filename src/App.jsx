@@ -30,7 +30,9 @@ import {
   Fingerprint,
   Key,
   Coins,
-  Sliders
+  Sliders,
+  BookOpen,
+  HelpCircle
 } from 'lucide-react'
 import './App.css'
 import AgentCommandCenter from './components/AgentCommandCenter'
@@ -40,6 +42,7 @@ import FaqPage from './components/FaqPage'
 import AboutPage from './components/AboutPage'
 import ContactPage from './components/ContactPage'
 import LegalPages from './components/LegalPages'
+import { TokenIcon, NetworkIcon } from './components/Icons'
 
 // Web3 Imports
 import { ConnectButton } from '@rainbow-me/rainbowkit'
@@ -148,7 +151,7 @@ const getTaxRateBps = (loc) => {
 function App() {
   const [route, setRoute] = useState(() => {
     const hash = window.location.hash;
-    if (hash === '#/app') return 'app';
+    if (hash.startsWith('#/app')) return 'app';
     if (hash === '#/docs') return 'docs';
     if (hash === '#/faq') return 'faq';
     if (hash === '#/about') return 'about';
@@ -158,11 +161,23 @@ function App() {
     return 'home';
   });
 
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#/app/')) {
+      return hash.replace('#/app/', '');
+    }
+    return 'dashboard';
+  });
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash === '#/app') {
+      if (hash.startsWith('#/app')) {
         setRoute('app');
+        if (hash.startsWith('#/app/')) {
+          const tab = hash.replace('#/app/', '');
+          setActiveTab(tab);
+        }
       } else if (hash === '#/docs') {
         setRoute('docs');
       } else if (hash === '#/faq') {
@@ -183,9 +198,10 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const navigateTo = (path) => {
-    if (path === 'app') window.location.hash = '#/app';
-    else if (path === 'docs') window.location.hash = '#/docs';
+  const navigateTo = (path, tab = null) => {
+    if (path === 'app') {
+      window.location.hash = tab ? `#/app/${tab}` : '#/app';
+    } else if (path === 'docs') window.location.hash = '#/docs';
     else if (path === 'faq') window.location.hash = '#/faq';
     else if (path === 'about') window.location.hash = '#/about';
     else if (path === 'privacy') window.location.hash = '#/privacy';
@@ -194,12 +210,17 @@ function App() {
     else window.location.hash = '#/';
   };
 
-  const [activeTab, setActiveTab] = useState('dashboard')
+  useEffect(() => {
+    if (route === 'app') {
+      window.location.hash = `#/app/${activeTab}`;
+    }
+  }, [activeTab, route]);
+
   const [showOnboarding, setShowOnboarding] = useState(true)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   // Wagmi Account details
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, chain } = useAccount()
   const { disconnect } = useDisconnect()
   const publicClient = usePublicClient()
 
@@ -379,6 +400,12 @@ function App() {
   const [withdrawLeftoverAmount, setWithdrawLeftoverAmount] = useState('');
   const [newOracleAddress, setNewOracleAddress] = useState('');
   const [isProposing, setIsProposing] = useState(false);
+
+  // Referral System States
+  const [referralEmployee, setReferralEmployee] = useState('');
+  const [referralReferrer, setReferralReferrer] = useState('');
+  const [referralRate, setReferralRate] = useState('0.5');
+  const [referralLoading, setReferralLoading] = useState(false);
 
   // Local state for streams tracking (synced to contract)
   const [streamIds, setStreamIds] = useState(() => {
@@ -740,6 +767,61 @@ function App() {
   const [maxGasPriceInput, setMaxGasPriceInput] = useState('50')
   const [isConfiguringRules, setIsConfiguringRules] = useState(false)
 
+  const [isDcwLoading, setIsDcwLoading] = useState(true)
+
+  const renderStatsCardSkeleton = () => (
+    <div className="stats-card shimmer-bg" style={{ minHeight: '140px' }}>
+      <div className="stats-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="skeleton-box" style={{ width: '60%', height: '14px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+        <div className="skeleton-box" style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+      </div>
+      <div style={{ marginTop: '16px', marginBottom: '8px' }}>
+        <div className="skeleton-box" style={{ width: '80%', height: '28px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+      </div>
+      <div className="stats-footer" style={{ marginTop: '12px' }}>
+        <div className="skeleton-box" style={{ width: '40%', height: '10px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+      </div>
+    </div>
+  )
+
+  const renderChartSkeleton = () => (
+    <div className="panel-card shimmer-bg" style={{ minHeight: '350px', marginBottom: 0 }}>
+      <div className="panel-card-title">
+        <div className="skeleton-box" style={{ width: '40%', height: '16px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '20px', marginTop: '20px' }}>
+        <div className="skeleton-box" style={{ width: '130px', height: '130px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '12px' }}>
+          <div className="skeleton-box" style={{ width: '100%', height: '12px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+          <div className="skeleton-box" style={{ width: '100%', height: '12px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+          <div className="skeleton-box" style={{ width: '100%', height: '12px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderEmployeeListSkeleton = () => (
+    <div className="panel-card shimmer-bg" style={{ marginBottom: 0 }}>
+      <div className="panel-card-title">
+        <div className="skeleton-box" style={{ width: '45%', height: '16px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {[1, 2, 3].map((n) => (
+          <div key={n} className="stream-card" style={{ display: 'flex', gap: '16px', padding: '16px', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="skeleton-box" style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+              <div style={{ flex: 1 }}>
+                <div className="skeleton-box" style={{ width: '50%', height: '12px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '6px' }}></div>
+                <div className="skeleton-box" style={{ width: '30%', height: '8px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+              </div>
+            </div>
+            <div className="skeleton-box" style={{ width: '80%', height: '14px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+            <div className="skeleton-box" style={{ width: '100%', height: '10px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   useEffect(() => {
     if (address) {
@@ -1204,15 +1286,16 @@ function App() {
   // Fetch DCW status on component mount or autopilot change
   useEffect(() => {
     const checkDcwStatus = async () => {
+      setIsDcwLoading(true)
       try {
-        const res = await fetch('http://localhost:3001/api/treasury/status')
+        const res = await fetch('http://localhost:3011/api/treasury/status')
         const data = await res.json()
         setDcwIsLive(data.isLiveMode)
         if (data.address) {
           setDcwAddress(data.address)
           setDcwWalletId(data.walletId)
           // Fetch balance
-          const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${data.address}`)
+          const balRes = await fetch(`http://localhost:3011/api/treasury/balance?address=${data.address}`)
           const balData = await balRes.json()
           if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
             setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
@@ -1221,6 +1304,8 @@ function App() {
       } catch (e) {
         console.warn('DCW service is offline:', e.message)
         setDcwError('DCW backend service is offline')
+      } finally {
+        setIsDcwLoading(false)
       }
     }
     
@@ -1489,7 +1574,7 @@ function App() {
     setIsDcwCreating(true)
     setDcwError('')
     try {
-      const res = await fetch('http://localhost:3001/api/treasury/create-wallet', {
+      const res = await fetch('http://localhost:3011/api/treasury/create-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -1500,7 +1585,7 @@ function App() {
         triggerToast('Developer Wallet Created', `Wallet: ${data.address}`)
         
         // Fetch balance
-        const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${data.address}`)
+        const balRes = await fetch(`http://localhost:3011/api/treasury/balance?address=${data.address}`)
         const balData = await balRes.json()
         if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
           setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
@@ -1512,7 +1597,7 @@ function App() {
     } catch (e) {
       console.error(e)
       setDcwError('DCW backend service is offline')
-      triggerToast('Connection Error', 'Backend service at port 3001 is offline.')
+      triggerToast('Connection Error', 'Backend service at port 3011 is offline.')
     } finally {
       setIsDcwCreating(false)
     }
@@ -1521,7 +1606,7 @@ function App() {
   const handleRefreshDcwBalance = async () => {
     if (!dcwAddress) return
     try {
-      const balRes = await fetch(`http://localhost:3001/api/treasury/balance?address=${dcwAddress}`)
+      const balRes = await fetch(`http://localhost:3011/api/treasury/balance?address=${dcwAddress}`)
       const balData = await balRes.json()
       if (balData.success && balData.tokenBalances && balData.tokenBalances.length > 0) {
         setDcwBalance(Number(balData.tokenBalances[0].amount).toFixed(2))
@@ -1623,7 +1708,7 @@ function App() {
           address: USDC_TOKEN_ADDRESS,
           abi: USDC_ABI,
           functionName: 'approve',
-          args: [MICRO_BENEFITS_VAULT_ADDRESS, parseUnits('1000000', 6)]
+          args: [MICRO_BENEFITS_VAULT_ADDRESS, stakeVal]
         })
         await publicClient.waitForTransactionReceipt({ hash: approveHash })
         refetchBenefitsAllowance()
@@ -1673,7 +1758,7 @@ function App() {
           address: USDC_TOKEN_ADDRESS,
           abi: USDC_ABI,
           functionName: 'approve',
-          args: [TREASURY_BUFFER_MANAGER_ADDRESS, parseUnits('10000000', 6)]
+          args: [TREASURY_BUFFER_MANAGER_ADDRESS, depositVal]
         })
         await publicClient.waitForTransactionReceipt({ hash: approveHash })
         refetchBufferAllowance()
@@ -1891,7 +1976,7 @@ function App() {
         const totalCapRaw = parseUnits(newEmployeeCap.toString(), 6)
         
         triggerToast('Requesting Circle DCW', 'Broadcasting automatic stream via Circle API...')
-        const response = await fetch('http://localhost:3001/api/payroll/start-stream', {
+        const response = await fetch('http://localhost:3011/api/payroll/start-stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2273,6 +2358,7 @@ function App() {
       return;
     }
 
+    setApproveLoading(true);
     try {
       const employeesArr = parsedWorkers.map(w => w.address);
       const flowRatesArr = parsedWorkers.map(w => parseUnits(w.flowRate.toString(), 6));
@@ -2358,6 +2444,8 @@ function App() {
     } catch (err) {
       console.error(err);
       triggerToast('Batch Stream Creation Failed', err.message);
+    } finally {
+      setApproveLoading(false);
     }
   };
 
@@ -2513,6 +2601,41 @@ function App() {
     } catch (err) {
       console.error(err);
       triggerToast('Execution Failed', err.message);
+    }
+  };
+
+  const handleRegisterReferral = async () => {
+    if (!referralEmployee || !referralReferrer || !referralRate) return;
+    try {
+      setReferralLoading(true);
+      const bps = Math.round(parseFloat(referralRate) * 100);
+      const hash = await writeContractAsync({
+        address: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'setReferral',
+        args: [referralEmployee, referralReferrer, bps],
+      });
+      // Add to tx list
+      setTransactions((prev) => [
+        {
+          id: prev.length + 1,
+          type: 'Register Referral',
+          engineer: `Employee: ${referralEmployee.slice(0, 6)}...`,
+          amount: `${referralRate}% split`,
+          txHash: hash.slice(0, 10) + '...',
+          time: 'Just now',
+          gas: '0.0012 USDC',
+          status: 'Pending'
+        },
+        ...prev
+      ]);
+      setReferralEmployee('');
+      setReferralReferrer('');
+    } catch (e) {
+      console.error(e);
+      alert('Referral registration failed: ' + e.message);
+    } finally {
+      setReferralLoading(false);
     }
   };
 
@@ -3190,25 +3313,25 @@ function App() {
   const onboardingProgressPercent = completedSteps * 25;
 
   if (route === 'home') {
-    return <LandingPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <LandingPage onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'docs') {
-    return <DocsPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <DocsPage onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'faq') {
-    return <FaqPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <FaqPage onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'about') {
-    return <AboutPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <AboutPage onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'contact') {
-    return <ContactPage onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <ContactPage onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'privacy') {
-    return <LegalPages mode="privacy" onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <LegalPages mode="privacy" onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
   if (route === 'terms') {
-    return <LegalPages mode="terms" onLaunchApp={() => navigateTo('app')} navigateTo={navigateTo} />;
+    return <LegalPages mode="terms" onLaunchApp={(tab = null) => navigateTo('app', tab)} navigateTo={navigateTo} />;
   }
 
   return (
@@ -3282,8 +3405,14 @@ function App() {
           </div>
 
           {/* Connect Button */}
-          <div style={{ padding: '0 20px 20px', borderBottom: '2px dashed rgba(255, 255, 255, 0.15)', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ padding: '0 20px 20px', borderBottom: '2px dashed rgba(255, 255, 255, 0.15)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             <ConnectButton showBalance={false} chainStatus="none" accountStatus="avatar" />
+            {isConnected && chain && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6px', border: '1px solid var(--border-color)', width: '100%', justifyContent: 'center' }}>
+                <NetworkIcon name={chain.name} size={14} />
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#fff' }}>{chain.name}</span>
+              </div>
+            )}
           </div>
 
           <ul className="nav-list" style={{ marginTop: '20px' }}>
@@ -3359,6 +3488,39 @@ function App() {
                 How It Works
               </a>
             </li>
+
+            <li style={{ height: '1px', borderTop: '2px dashed rgba(255,255,255,0.1)', margin: '12px 16px' }}></li>
+
+            <li className="nav-item">
+              <a
+                className="nav-link"
+                onClick={() => { navigateTo('docs'); setIsMobileSidebarOpen(false); }}
+                style={{ color: '#A1A1AA', fontSize: '12px' }}
+              >
+                <BookOpen size={16} />
+                Developer Docs
+              </a>
+            </li>
+            <li className="nav-item">
+              <a
+                className="nav-link"
+                onClick={() => { navigateTo('faq'); setIsMobileSidebarOpen(false); }}
+                style={{ color: '#A1A1AA', fontSize: '12px' }}
+              >
+                <HelpCircle size={16} />
+                FAQ Help
+              </a>
+            </li>
+            <li className="nav-item">
+              <a
+                className="nav-link"
+                onClick={() => { navigateTo('contact'); setIsMobileSidebarOpen(false); }}
+                style={{ color: '#A1A1AA', fontSize: '12px' }}
+              >
+                <Sliders size={16} />
+                Support Inquiry
+              </a>
+            </li>
           </ul>
         </div>
 
@@ -3395,8 +3557,11 @@ function App() {
                 </button>
               )}
             </div>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#fff', marginTop: '2px', display: 'flex', flexDirection: 'column' }}>
-              <span>{usdcBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} Digital USD (USDC)</span>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#fff', marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <TokenIcon symbol="USDC" size={16} />
+                {usdcBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} USDC
+              </span>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Processing Fees: Sponsored (Free)</span>
             </div>
           </div>
@@ -3524,7 +3689,12 @@ function App() {
                   {step3Done ? <CheckCircle size={14} color="var(--color-success)" /> : <span style={{ color: 'var(--text-muted)' }}>Awaiting</span>}
                 </div>
                 <div className="onboarding-step-title">Start continuous Pay Flow</div>
-                <div className="onboarding-step-desc">Navigate to the "Continuous Salary Flows" tab and deploy a continuous salary stream to a recipient address.</div>
+                <div className="onboarding-step-desc">
+                  Navigate to the "Continuous Salary Flows" tab and deploy a continuous salary stream to a recipient address.
+                  {!step3Done && (
+                    <span onClick={() => setActiveTab('streaming')} style={{ color: 'var(--color-primary)', fontWeight: '800', cursor: 'pointer', display: 'block', marginTop: '6px', fontSize: '11px' }} className="hover-underline">Go to Streams Tab →</span>
+                  )}
+                </div>
               </div>
 
               <div className={`onboarding-step-card ${step3Done && !step4Done ? 'active' : ''} ${step4Done ? 'completed' : ''}`}>
@@ -3533,7 +3703,12 @@ function App() {
                   {step4Done ? <CheckCircle size={14} color="var(--color-success)" /> : <span style={{ color: 'var(--text-muted)' }}>Awaiting</span>}
                 </div>
                 <div className="onboarding-step-title">Divert Savings</div>
-                <div className="onboarding-step-desc">Go to the "My Benefits & Savings" tab, configure your split sliders, and deposit funds to see splits auto-allocate.</div>
+                <div className="onboarding-step-desc">
+                  Go to the "My Benefits & Savings" tab, configure your split sliders, and deposit funds to see splits auto-allocate.
+                  {!step4Done && (
+                    <span onClick={() => setActiveTab('benefits')} style={{ color: 'var(--color-primary)', fontWeight: '800', cursor: 'pointer', display: 'block', marginTop: '6px', fontSize: '11px' }} className="hover-underline">Go to Benefits Tab →</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -3546,73 +3721,87 @@ function App() {
           </div>
         )}
 
-        {/* 1. Dashboard Overview Tab */}
-        {activeTab === 'dashboard' && (
+        <div className="fade-in-route" key={activeTab}>
+          {/* 1. Dashboard Overview Tab */}
+          {activeTab === 'dashboard' && (
           <>
             {/* Top Cards Row */}
             <div className="dashboard-grid">
-              <div className="stats-card">
-                <div className="stats-header">
-                  <span>Total Payout Funds Protected</span>
-                  <div className="stats-icon-wrapper primary">
-                    <Wallet size={16} />
+              {isDcwLoading ? (
+                <>
+                  {renderStatsCardSkeleton()}
+                  {renderStatsCardSkeleton()}
+                  {renderStatsCardSkeleton()}
+                  {renderStatsCardSkeleton()}
+                </>
+              ) : (
+                <>
+                  <div className="stats-card">
+                    <div className="stats-header">
+                      <span>Total Payout Funds Protected</span>
+                      <div className="stats-icon-wrapper primary">
+                        <Wallet size={16} />
+                      </div>
+                    </div>
+                    <div className="stats-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <TokenIcon symbol="USDC" size={20} />
+                      {employees.reduce((acc, emp) => acc + emp.totalCap, 0).toLocaleString('en-US')} USDC
+                    </div>
+                    <div className="stats-footer">
+                      <span style={{ color: 'var(--color-success)', fontWeight: '600' }}>100% Secure</span>
+                      <span>held in automated payment escrows</span>
+                    </div>
                   </div>
-                </div>
-                <div className="stats-value">
-                  {employees.reduce((acc, emp) => acc + emp.totalCap, 0).toLocaleString('en-US')} USDC
-                </div>
-                <div className="stats-footer">
-                  <span style={{ color: 'var(--color-success)', fontWeight: '600' }}>100% Secure</span>
-                  <span>held in automated payment escrows</span>
-                </div>
-              </div>
 
-              <div className="stats-card">
-                <div className="stats-header">
-                  <span>Live Salaries Disbursed</span>
-                  <div className="stats-icon-wrapper secondary">
-                    <Zap size={16} />
+                  <div className="stats-card">
+                    <div className="stats-header">
+                      <span>Live Salaries Disbursed</span>
+                      <div className="stats-icon-wrapper secondary">
+                        <Zap size={16} />
+                      </div>
+                    </div>
+                    <div className="stats-value ticking-val" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <TokenIcon symbol="USDC" size={20} />
+                      {totalStreamedUSDC.toFixed(5)} USDC
+                    </div>
+                    <div className="stats-footer">
+                      <span className="live-pulse"></span>
+                      <span style={{ marginLeft: '4px' }}>Accruing live second-by-second</span>
+                    </div>
                   </div>
-                </div>
-                <div className="stats-value ticking-val">
-                  {totalStreamedUSDC.toFixed(5)} USDC
-                </div>
-                <div className="stats-footer">
-                  <span className="live-pulse"></span>
-                  <span style={{ marginLeft: '4px' }}>Accruing live second-by-second</span>
-                </div>
-              </div>
 
-              <div className="stats-card">
-                <div className="stats-header">
-                  <span>Active Pay Channels</span>
-                  <div className="stats-icon-wrapper success">
-                    <Activity size={16} />
+                  <div className="stats-card">
+                    <div className="stats-header">
+                      <span>Active Pay Channels</span>
+                      <div className="stats-icon-wrapper success">
+                        <Activity size={16} />
+                      </div>
+                    </div>
+                    <div className="stats-value">
+                      {activeCount} / {employees.length}
+                    </div>
+                    <div className="stats-footer">
+                      <span>1 restricted payment destination isolated for safety</span>
+                    </div>
                   </div>
-                </div>
-                <div className="stats-value">
-                  {activeCount} / {employees.length}
-                </div>
-                <div className="stats-footer">
-                  <span>1 restricted payment destination isolated for safety</span>
-                </div>
-              </div>
 
-              <div className="stats-card">
-                <div className="stats-header">
-                  <span>Settlement Time</span>
-                  <div className="stats-icon-wrapper warning">
-                    <ShieldCheck size={16} />
+                  <div className="stats-card">
+                    <div className="stats-header">
+                      <span>Settlement Time</span>
+                      <div className="stats-icon-wrapper warning">
+                        <ShieldCheck size={16} />
+                      </div>
+                    </div>
+                    <div className="stats-value">
+                      Instant (&lt;0.8s)
+                    </div>
+                    <div className="stats-footer">
+                      <span style={{ color: 'var(--color-success)' }}>Zero delay</span>
+                      <span>no manual bank processing</span>
+                    </div>
                   </div>
-                </div>
-                <div className="stats-value">
-                  Instant (&lt;0.8s)
-                </div>
-                <div className="stats-footer">
-                  <span style={{ color: 'var(--color-success)' }}>Zero delay</span>
-                  <span>no manual bank processing</span>
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             {/* Treasury Health Tracker Dashboard */}
@@ -3726,8 +3915,8 @@ function App() {
                       placeholder="USDC Amount"
                       value={bufferAmount}
                       onChange={(e) => setBufferAmount(e.target.value)}
-                      className="input-field"
-                      style={{ flex: 1, height: '38px', padding: '0 12px', backgroundColor: 'rgba(0,0,0,0.2)', border: '1.5px solid var(--border-color)', borderRadius: '6px', color: '#FFF' }}
+                      className="form-input"
+                      style={{ flex: 1 }}
                     />
                     <button
                       className="btn btn-primary"
@@ -3747,8 +3936,11 @@ function App() {
                     </button>
                   </div>
                   
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>USDC Wallet: {usdcBalance.toFixed(2)} USDC</span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <TokenIcon symbol="USDC" size={12} />
+                      USDC Wallet: {usdcBalance.toFixed(2)} USDC
+                    </span>
                     <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setBufferAmount(usdcBalance.toString())}>Max</span>
                   </div>
                 </div>
@@ -3796,8 +3988,9 @@ function App() {
                         className="btn btn-primary"
                         onClick={handleProvisionDcw}
                         disabled={isDcwCreating}
-                        style={{ fontSize: '12px', padding: '8px 16px' }}
+                        style={{ fontSize: '12px', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                       >
+                        {isDcwCreating && <span className="spinner-icon" />}
                         {isDcwCreating ? 'Provisioning Wallet...' : 'Provision Corporate Developer Wallet'}
                       </button>
                       {dcwError && (
@@ -3825,7 +4018,8 @@ function App() {
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                       <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>DCW Treasury Balance:</span>
-                      <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)' }}>
+                      <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <TokenIcon symbol="USDC" size={16} />
                         {dcwBalance} USDC
                       </span>
                     </div>
@@ -3880,7 +4074,8 @@ function App() {
                     <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Pre-Funded Payroll Balance</h4>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                       <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Arc Pre-Funded Treasury:</span>
-                      <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--color-success)' }}>
+                      <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <TokenIcon symbol="USDC" size={18} />
                         {employerPayrollBalance} USDC
                       </span>
                     </div>
@@ -3894,123 +4089,139 @@ function App() {
 
             {/* Dashboard Visual Panels */}
             <div className="dashboard-panels-grid">
-              
-              {/* Active Streams Panel */}
-              <div className="panel-card" style={{ marginBottom: 0 }}>
-                <div className="panel-card-title">
-                  <Activity size={18} color="var(--color-primary)" />
-                  Real-time Pay Streams
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {employees.slice(0, 3).map((emp) => (
-                    <div key={emp.id} className="stream-card">
-                      <div className="stream-card-section stream-card-info">
-                        <div className="stream-info">
-                          <div className="avatar">{emp.avatar}</div>
-                          <div className="engineer-details">
-                            <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {emp.name}
-                              {emp.isPrivate && (
-                                <span style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  fontSize: '9px',
-                                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
-                                  color: '#A78BFA',
-                                  padding: '1px 6px',
-                                  borderRadius: '4px',
-                                  border: '1px solid rgba(139, 92, 246, 0.3)',
-                                  fontWeight: 'normal'
-                                }}>
-                                  Private
-                                </span>
-                              )}
-                            </h4>
-                            <p>{emp.role}</p>
+              {isDcwLoading ? (
+                <>
+                  {renderEmployeeListSkeleton()}
+                  {renderChartSkeleton()}
+                </>
+              ) : (
+                <>
+                  {/* Active Streams Panel */}
+                  <div className="panel-card" style={{ marginBottom: 0 }}>
+                    <div className="panel-card-title">
+                      <Activity size={18} color="var(--color-primary)" />
+                      Real-time Pay Streams
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {employees.slice(0, 3).map((emp) => (
+                        <div key={emp.id} className="stream-card">
+                          <div className="stream-card-section stream-card-info">
+                            <div className="stream-info">
+                              <div className="avatar">{emp.avatar}</div>
+                              <div className="engineer-details">
+                                <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {emp.name}
+                                  {emp.isPrivate && (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      fontSize: '9px',
+                                      backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                                      color: '#A78BFA',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      border: '1px solid rgba(139, 92, 246, 0.3)',
+                                      fontWeight: 'normal'
+                                    }}>
+                                      Private
+                                    </span>
+                                  )}
+                                </h4>
+                                <p>{emp.role}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="stream-card-section stream-card-counter-wrapper">
+                            <span className="stream-counter-label">Accrued Salary (Live)</span>
+                            <div className="stream-counter-value" style={{ color: emp.isActive ? 'var(--color-secondary)' : 'var(--text-muted)' }}>
+                              {emp.accruedLive.toFixed(5)} USDC
+                            </div>
+                            <span className="stream-flow-details">
+                              Velocity: {emp.isPrivate ? 'Masked 🔒' : `Velocity: ${emp.flowRate.toFixed(4)} USDC/s (~$${(emp.flowRate * 3600).toFixed(2)}/hr)`}
+                            </span>
+                          </div>
+                          <div className="stream-card-section stream-card-progress">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                              <span>{(emp.accruedLive / emp.totalCap * 100).toFixed(1)}%</span>
+                              <span>Limit: {emp.totalCap} USDC</span>
+                            </div>
+                            <div className="stream-progress-bar">
+                              <div
+                                className="stream-progress-bar-fill"
+                                style={{ width: `${(emp.accruedLive / emp.totalCap) * 100}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div className="stream-card-section stream-card-status">
+                            <span className={`badge ${emp.complianceStatus === 'Verified' ? 'badge-success' : 'badge-danger'}`}>
+                              {emp.complianceStatus === 'Verified' ? 'Security Cleared' : 'Flagged'}
+                            </span>
                           </div>
                         </div>
-                      </div>
-                      <div className="stream-card-section stream-card-counter-wrapper">
-                        <span className="stream-counter-label">Accrued Salary (Live)</span>
-                        <div className="stream-counter-value" style={{ color: emp.isActive ? 'var(--color-secondary)' : 'var(--text-muted)' }}>
-                          {emp.accruedLive.toFixed(5)} USDC
-                        </div>
-                        <span className="stream-flow-details">
-                          Velocity: {emp.isPrivate ? 'Masked 🔒' : `Velocity: ${emp.flowRate.toFixed(4)} USDC/s (~$${(emp.flowRate * 3600).toFixed(2)}/hr)`}
-                        </span>
-                      </div>
-                      <div className="stream-card-section stream-card-progress">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                          <span>{(emp.accruedLive / emp.totalCap * 100).toFixed(1)}%</span>
-                          <span>Limit: {emp.totalCap} USDC</span>
-                        </div>
-                        <div className="stream-progress-bar">
-                          <div
-                            className="stream-progress-bar-fill"
-                            style={{ width: `${(emp.accruedLive / emp.totalCap) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div className="stream-card-section stream-card-status">
-                        <span className={`badge ${emp.complianceStatus === 'Verified' ? 'badge-success' : 'badge-danger'}`}>
-                          {emp.complianceStatus === 'Verified' ? 'Security Cleared' : 'Flagged'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Benefits Vault Panel */}
-              <div className="panel-card" style={{ marginBottom: 0 }}>
-                <div className="panel-card-title">
-                  <HeartHandshake size={18} color="var(--color-secondary)" />
-                  My Savings & Benefits Allocations
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  {/* Dynamic pie segment representation */}
-                  <div className="pie-chart" style={{
-                    background: `conic-gradient(
-                      var(--color-primary) 0% ${benefitsConfig.health}%,
-                      var(--color-secondary) ${benefitsConfig.health}% ${benefitsConfig.health + benefitsConfig.retirement}%,
-                      var(--color-success) ${benefitsConfig.health + benefitsConfig.retirement}% 100%
-                    )`
-                  }}>
-                    <div className="pie-inner-cutout">
-                      <div className="pie-inner-value">${(healthBalance + liveRetirement + liveEmergency).toFixed(2)}</div>
-                      <div className="pie-inner-label">Total Savings Saved</div>
+                      ))}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div className="legend-color" style={{ backgroundColor: 'var(--color-primary)' }}></div>
-                        Health Savings HSA ({benefitsConfig.health}%)
-                      </span>
-                      <span style={{ fontWeight: '700' }}>{healthBalance.toFixed(2)} USDC</span>
+                  {/* Benefits Vault Panel */}
+                  <div className="panel-card" style={{ marginBottom: 0 }}>
+                    <div className="panel-card-title">
+                      <HeartHandshake size={18} color="var(--color-secondary)" />
+                      My Savings & Benefits Allocations
                     </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                      {/* Dynamic pie segment representation */}
+                      <div className="pie-chart" style={{
+                        background: `conic-gradient(
+                          var(--color-primary) 0% ${benefitsConfig.health}%,
+                          var(--color-secondary) ${benefitsConfig.health}% ${benefitsConfig.health + benefitsConfig.retirement}%,
+                          var(--color-success) ${benefitsConfig.health + benefitsConfig.retirement}% 100%
+                        )`
+                      }}>
+                        <div className="pie-inner-cutout">
+                          <div className="pie-inner-value">${(healthBalance + liveRetirement + liveEmergency).toFixed(2)}</div>
+                          <div className="pie-inner-label">Total Savings Saved</div>
+                        </div>
+                      </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div className="legend-color" style={{ backgroundColor: 'var(--color-secondary)' }}></div>
-                        Personal Pension Pot ({benefitsConfig.retirement}%)
-                      </span>
-                      <span style={{ fontWeight: '700' }}>{liveRetirement.toFixed(4)} USDC</span>
-                    </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div className="legend-color" style={{ backgroundColor: 'var(--color-primary)' }}></div>
+                            Health Savings HSA ({benefitsConfig.health}%)
+                          </span>
+                          <span style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <TokenIcon symbol="USDC" size={14} />
+                            {healthBalance.toFixed(2)} USDC
+                          </span>
+                        </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', paddingBottom: '6px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div className="legend-color" style={{ backgroundColor: 'var(--color-success)' }}></div>
-                        Rainy-Day Emergency Reserve ({benefitsConfig.emergency}%)
-                      </span>
-                      <span style={{ fontWeight: '700' }}>{liveEmergency.toFixed(4)} USDC</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div className="legend-color" style={{ backgroundColor: 'var(--color-secondary)' }}></div>
+                            Personal Pension Pot ({benefitsConfig.retirement}%)
+                          </span>
+                          <span style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <TokenIcon symbol="USDC" size={14} />
+                            {liveRetirement.toFixed(4)} USDC
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', paddingBottom: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div className="legend-color" style={{ backgroundColor: 'var(--color-success)' }}></div>
+                            Rainy-Day Emergency Reserve ({benefitsConfig.emergency}%)
+                          </span>
+                          <span style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <TokenIcon symbol="USDC" size={14} />
+                            {liveEmergency.toFixed(4)} USDC
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-
+                </>
+              )}
             </div>
 
             {/* Recent On-Chain Ledger */}
@@ -4039,7 +4250,7 @@ function App() {
                   <span className="live-pulse" style={{ backgroundColor: 'var(--color-error)', width: '6px', height: '6px', marginLeft: '0px' }}></span>
                 </div>
               </div>
-              <div className="table-container">
+              <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -4100,7 +4311,8 @@ function App() {
                       placeholder="USDC Amount"
                       value={withdrawLeftoverAmount}
                       onChange={(e) => setWithdrawLeftoverAmount(e.target.value)}
-                      style={{ flexGrow: 1, backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '6px 10px', color: '#fff', fontSize: '13px' }}
+                      className="form-input"
+                      style={{ flexGrow: 1 }}
                     />
                     <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }} disabled={isProposing || !isConnected}>
                       Propose
@@ -4116,7 +4328,8 @@ function App() {
                       placeholder="New Oracle Address (0x...)"
                       value={newOracleAddress}
                       onChange={(e) => setNewOracleAddress(e.target.value)}
-                      style={{ flexGrow: 1, backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '6px 10px', color: '#fff', fontSize: '13px' }}
+                      className="form-input"
+                      style={{ flexGrow: 1 }}
                     />
                     <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }} disabled={isProposing || !isConnected}>
                       Propose
@@ -4242,14 +4455,14 @@ function App() {
 
                 <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: '8px', border: '1.5px solid var(--border-color)' }}>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>HSA Savings Deposited</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-success)', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
                     {employees.reduce((sum, e) => sum + (e.accruedPaid * (e.healthPercent || 5) / 100), 0).toFixed(4)} USDC
                   </div>
                 </div>
 
                 <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: '8px', border: '1.5px solid var(--border-color)' }}>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Pension & Emergency Funds</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
                     {employees.reduce((sum, e) => {
                       const pension = e.accruedPaid * (e.retirementPercent || 5) / 100;
                       const emergency = e.accruedPaid * (e.emergencyPercent || 5) / 100;
@@ -4257,6 +4470,139 @@ function App() {
                     }, 0).toFixed(4)} USDC
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* x402 Real-Time Micro-Payment batching tracker */}
+            <div className="panel-card" style={{ marginBottom: '24px' }}>
+              <div className="panel-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Layers size={18} color="var(--color-primary)" />
+                <span style={{ fontSize: '16px', fontWeight: 'bold' }}>x402 Real-Time Micro-Payment Batching Tracker</span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                Monitor the real-time processing of micro-transactions batched via the Canteen x402 middleware. Payments are aggregated off-chain and settled periodically on the Arc blockchain.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: '8px', border: '1.5px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Facilitator Queue</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-primary)' }}>12 Transactions</div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-success)', marginTop: '4px' }}>● Ready to Batch</div>
+                </div>
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: '8px', border: '1.5px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Aggregated Volume</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-secondary)' }}>0.4820 USDC</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Next epoch in 45s</div>
+                </div>
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: '8px', border: '1.5px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Relayer Status</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10B981' }}>Active</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Fee delegation: Sponsored</div>
+                </div>
+              </div>
+
+              {/* x402 6-Step Visual Pipeline */}
+              <div style={{ padding: '20px 0', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '16px', color: 'var(--text-muted)' }}>Transaction Pipeline</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+                  {/* Pipeline bar background */}
+                  <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '3px', backgroundColor: 'rgba(255,255,255,0.05)', zIndex: 1 }}>
+                    <div style={{ width: '80%', height: '100%', backgroundColor: 'var(--color-primary)' }}></div>
+                  </div>
+
+                  {[
+                    { step: '1', name: 'Sign EIP-712', desc: 'Wallet authorizes toll', done: true },
+                    { step: '2', name: 'Facilitator Queue', desc: 'Added to pending batch', done: true },
+                    { step: '3', name: 'Co-op Routing', desc: 'Diverting splits & fees', done: true },
+                    { step: '4', name: 'Relayer Gas', desc: 'NexaPaymaster sponsorship', done: true },
+                    { step: '5', name: 'On-chain Batch', desc: 'submitBatch on Arc Testnet', done: true },
+                    { step: '6', name: 'Settlement', desc: 'USDC deposited to creator', done: false }
+                  ].map((s, idx) => (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '15%' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        backgroundColor: s.done ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)',
+                        border: s.done ? 'none' : '1.5px solid var(--border-color)',
+                        color: s.done ? '#000' : '#fff',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '13px',
+                        marginBottom: '8px'
+                      }}>
+                        {s.done ? <Check size={14} strokeWidth={3} /> : s.step}
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: s.done ? '#fff' : 'var(--text-muted)', textAlign: 'center' }}>{s.name}</span>
+                      <span style={{ fontSize: '9px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '2px' }}>{s.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Platform Referral & Viral Growth panel */}
+            <div className="panel-card" style={{ marginBottom: '24px' }}>
+              <div className="panel-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HeartHandshake size={18} color="var(--color-secondary)" />
+                  <span style={{ fontSize: '16px', fontWeight: 'bold' }}>Referral Rewards Program</span>
+                </div>
+                <span className="badge badge-success" style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#93C5FD', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px', fontWeight: 'bold' }}>
+                  On-chain Splitting
+                </span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                Register a referral mapping in the payroll smart contract. Referrers receive a customized percentage slice (up to 5%) from the employee's stream claims automatically.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Employee Address</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="0x..."
+                    value={referralEmployee}
+                    onChange={(e) => setReferralEmployee(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Referrer Address</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="0x..."
+                    value={referralReferrer}
+                    onChange={(e) => setReferralReferrer(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Bonus Rate (%)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    placeholder="e.g. 0.5"
+                    step="0.1"
+                    min="0.1"
+                    max="5.0"
+                    value={referralRate}
+                    onChange={(e) => setReferralRate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  className="btn btn-primary"
+                  disabled={referralLoading}
+                  onClick={handleRegisterReferral}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '13px' }}
+                >
+                  {referralLoading ? <RefreshCw size={14} className="animate-spin" /> : 'Register Referral'}
+                </button>
               </div>
             </div>
           </>
@@ -4390,8 +4736,9 @@ function App() {
                       onChange={(e) => setNewEmployeeAddress(e.target.value)}
                       required
                     />
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      The digital wallet destination where the continuous salary will stream.
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                      <span>The digital wallet destination where the continuous salary will stream.</span>
+                      <span onClick={() => setActiveTab('compliance')} className="hover-underline" style={{ color: 'var(--color-primary)', fontWeight: '800', cursor: 'pointer' }}>Verify with AML Compliance Scanner →</span>
                     </div>
                   </div>
 
@@ -4431,7 +4778,10 @@ function App() {
                   </div>
 
                   <div className="form-group form-token-choice" style={{ marginBottom: '16px' }}>
-                    <label className="form-label">Recipient Payout Asset</label>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <TokenIcon symbol={recipientTokenChoice} size={18} />
+                      Recipient Payout Asset
+                    </label>
                     <select
                       className="form-input"
                       value={recipientTokenChoice}
@@ -4442,10 +4792,12 @@ function App() {
                       <option value="EURC">EURC (Auto Swap - Dynamic)</option>
                     </select>
                     {recipientTokenChoice === 'EURC' && (
-                      <div style={{ marginTop: '8px', padding: '10px', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)', backgroundColor: 'rgba(139, 92, 246, 0.05)', fontSize: '12px', color: 'var(--text-color)' }}>
+                      <div style={{ marginTop: '8px', padding: '10px', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)', backgroundColor: 'rgba(139, 92, 246, 0.05)', fontSize: '12px', color: 'var(--text-color)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                         <span style={{ fontWeight: 'bold', color: 'var(--color-secondary)' }}>AMM Exchange Rate Quote:</span> 
-                        <span style={{ marginLeft: '6px' }}>1 USDC ≈ 0.92 EURC</span>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <TokenIcon symbol="USDC" size={12} /> 1 USDC ≈ 0.92 EURC <TokenIcon symbol="EURC" size={12} />
+                        </span>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', width: '100%' }}>
                           Withdrawals will automatically execute an exact-input Uniswap V3 swap routed on Arc Testnet.
                         </div>
                       </div>
@@ -4589,7 +4941,7 @@ function App() {
                         <CheckCircle size={16} color="var(--color-success)" />
                         <strong>Parsed Onboarding Configuration ({parsedWorkers.length} Workers)</strong>
                       </div>
-                      <div className="table-container" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                      <div className="table-responsive" style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: 0 }}>
                         <table className="data-table" style={{ fontSize: '11px' }}>
                           <thead>
                             <tr>
@@ -4636,11 +4988,11 @@ function App() {
                     <button
                       type="submit"
                       className="btn btn-primary"
-                      style={{ flexGrow: 2, height: '46px' }}
-                      disabled={!isConnected || parsedWorkers.length === 0}
+                      style={{ flexGrow: 2, height: '46px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      disabled={approveLoading || !isConnected || parsedWorkers.length === 0}
                     >
-                      <Zap size={16} />
-                      Deploy Bulk Streams
+                      {approveLoading ? <span className="spinner-icon" /> : <Zap size={16} />}
+                      {approveLoading ? 'Deploying Bulk Streams...' : 'Deploy Bulk Streams'}
                     </button>
                   </div>
                 </form>
@@ -4738,29 +5090,31 @@ function App() {
                     </div>
 
                     <div className="stream-card-section stream-card-info" style={{ width: '22%' }}>
-                      <div className="avatar">{emp.avatar}</div>
-                      <div className="engineer-details">
-                        <h4 style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                          {emp.name}
-                          {emp.isPrivate && (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '9px',
-                              backgroundColor: 'rgba(139, 92, 246, 0.15)',
-                              color: '#A78BFA',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              border: '1px solid rgba(139, 92, 246, 0.3)',
-                              fontWeight: 'normal'
-                            }}>
-                              <ShieldCheck size={10} /> Private
-                            </span>
-                          )}
-                        </h4>
-                        <p>{emp.role}</p>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.location}</span>
+                      <div className="stream-info">
+                        <div className="avatar">{emp.avatar}</div>
+                        <div className="engineer-details">
+                          <h4 style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                            {emp.name}
+                            {emp.isPrivate && (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                fontSize: '9px',
+                                backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                                color: '#A78BFA',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(139, 92, 246, 0.3)',
+                                fontWeight: 'normal'
+                              }}>
+                                <ShieldCheck size={10} /> Private
+                              </span>
+                            )}
+                          </h4>
+                          <p>{emp.role}</p>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.location}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -4807,6 +5161,7 @@ function App() {
                           gap: '4px',
                           border: emp.targetPayoutToken === 'EURC' ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
                         }}>
+                          <TokenIcon symbol={emp.targetPayoutToken || 'USDC'} size={12} />
                           {emp.targetPayoutToken || 'USDC'}
                         </span>
                         <button
@@ -4992,6 +5347,30 @@ function App() {
                   </div>
                 </div>
 
+                {blacklistStatus === 'passed' && scannedContracts === 'passed' && gasSimResult === 'passed' && (
+                  <div style={{
+                    marginTop: '20px',
+                    padding: '16px',
+                    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                    border: '1.5px solid rgba(34, 197, 94, 0.2)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle size={16} color="var(--color-success)" />
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)' }}>RECIPIENTS VERIFIED AND ROUTE CLEARED</span>
+                    </div>
+                    <button onClick={() => setActiveTab('streaming')} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>Deploy Continuous Pay Flow</span>
+                      <ArrowRight size={12} />
+                    </button>
+                  </div>
+                )}
+
               </div>
 
             </div>
@@ -5051,11 +5430,11 @@ function App() {
                   <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Sanctions Registry</div>
                   <input
                     type="text"
-                    className="input-field"
+                    className="form-input"
                     placeholder="Recipient Wallet Address (0x...)"
                     value={complianceTarget}
                     onChange={(e) => setComplianceTarget(e.target.value)}
-                    style={{ fontSize: '12px', padding: '8px', marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}
+                    style={{ marginBottom: '8px' }}
                   />
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -5082,11 +5461,11 @@ function App() {
                   <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Guardian Directory</div>
                   <input
                     type="text"
-                    className="input-field"
+                    className="form-input"
                     placeholder="Guardian Address (0x...)"
                     value={guardianTarget}
                     onChange={(e) => setGuardianTarget(e.target.value)}
-                    style={{ fontSize: '12px', padding: '8px', marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}
+                    style={{ marginBottom: '8px' }}
                   />
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -5133,7 +5512,8 @@ function App() {
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Activate your savings profile to start contributing to your medical insurance, emergency fund, and retirement pools.</div>
                   </div>
                 </div>
-                <button className="btn btn-primary" onClick={handleRegisterMember} disabled={registerLoading} style={{ flexShrink: 0 }}>
+                <button className="btn btn-primary" onClick={handleRegisterMember} disabled={registerLoading} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  {registerLoading && <span className="spinner-icon" />}
                   {registerLoading ? 'Activating Profile...' : 'Activate Savings Profile'}
                 </button>
               </div>
@@ -5231,9 +5611,15 @@ function App() {
                           onChange={(e) => setDepositAmount(e.target.value)}
                           required
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                          <span>Wallet Balance: {usdcBalance.toFixed(2)} USDC</span>
-                          <span>Healthcare HSA Split: {(parseFloat(depositAmount || '0') * benefitsConfig.health / 100).toFixed(2)} USDC</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <TokenIcon symbol="USDC" size={12} />
+                            Wallet Balance: {usdcBalance.toFixed(2)} USDC
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <TokenIcon symbol="USDC" size={12} />
+                            Healthcare HSA Split: {(parseFloat(depositAmount || '0') * benefitsConfig.health / 100).toFixed(2)} USDC
+                          </span>
                         </div>
                       </div>
 
@@ -5250,12 +5636,14 @@ function App() {
                         </ul>
                       </div>
                       
-                      {benefitsAllowance < parseFloat(depositAmount || '0') ? (
-                        <button type="button" className="btn btn-outline" style={{ width: '100%', height: '46px' }} onClick={handleApproveVault} disabled={approveLoading}>
+                       {benefitsAllowance < parseFloat(depositAmount || '0') ? (
+                        <button type="button" className="btn btn-outline" style={{ width: '100%', height: '46px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={handleApproveVault} disabled={approveLoading}>
+                          {approveLoading && <span className="spinner-icon" />}
                           {approveLoading ? 'Authorizing Payout Deposit...' : 'Authorize Savings Deposit Spend'}
                         </button>
                       ) : (
-                        <button type="submit" className="btn btn-success" style={{ width: '100%', height: '46px' }} disabled={depositLoading || !isConnected || parseFloat(depositAmount) <= 0}>
+                        <button type="submit" className="btn btn-success" style={{ width: '100%', height: '46px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} disabled={depositLoading || !isConnected || parseFloat(depositAmount) <= 0}>
+                          {depositLoading && <span className="spinner-icon" />}
                           {depositLoading ? 'Diverting Savings to Pots...' : 'Deposit Splits'}
                         </button>
                       )}
@@ -5284,18 +5672,21 @@ function App() {
                     {/* Healthcare */}
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff' }}>Healthcare HSA</div>
+                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>Healthcare HSA</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Non-yield allocation</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)' }}>{healthBalance.toFixed(2)} USDC</span>
+                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <TokenIcon symbol="USDC" size={14} />
+                          {healthBalance.toFixed(2)} USDC
+                        </span>
                       </div>
                     </div>
 
                     {/* Retirement pension */}
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           Personal Pension Pot
                           <span className="live-pulse" style={{ backgroundColor: 'var(--color-secondary)' }}></span>
                         </div>
@@ -5304,7 +5695,8 @@ function App() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-secondary)', fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <TokenIcon symbol="USDC" size={14} />
                           {liveRetirement.toFixed(6)} USDC
                         </span>
                       </div>
@@ -5313,7 +5705,7 @@ function App() {
                     {/* Emergency reserve */}
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           Rainy-Day Emergency Reserve
                           <span className="live-pulse" style={{ backgroundColor: 'var(--color-success)' }}></span>
                         </div>
@@ -5322,7 +5714,8 @@ function App() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-success)', fontFamily: 'var(--font-mono)' }}>
+                        <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-success)', fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <TokenIcon symbol="USDC" size={14} />
                           {liveEmergency.toFixed(6)} USDC
                         </span>
                       </div>
@@ -5355,8 +5748,10 @@ function App() {
                         onChange={(e) => setBillAmount(e.target.value)}
                         required
                       />
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                        Available Healthcare HSA Balance: <strong>{healthBalance.toFixed(2)} USDC</strong>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Available Healthcare HSA Balance:</span>
+                        <TokenIcon symbol="USDC" size={12} />
+                        <strong>{healthBalance.toFixed(2)} USDC</strong>
                       </div>
                     </div>
 
@@ -5413,7 +5808,7 @@ function App() {
                   )}
                   
                   <div className="panel-card" style={{ marginTop: '24px', backgroundColor: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-color)', padding: '16px' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#fff', marginBottom: '8px' }}>Community Co-op Safety Pool</h4>
+                    <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '8px' }}>Community Co-op Safety Pool</h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
                       A shared insurance pool funded by 20% of medical contributions. If your clinic bill exceeds your personal savings pot, the community fund automatically covers the remaining balance for you.
                     </p>
@@ -5460,14 +5855,14 @@ function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px 16px' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '4px' }}>Total Pool Size</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
                       {coopTreasury.toFixed(2)} <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>USDC</span>
                     </div>
                   </div>
 
                   <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px 16px' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '4px' }}>Total Pool Shares</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
                       {totalCoopShares.toFixed(2)} <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>SHARES</span>
                     </div>
                   </div>
@@ -5503,11 +5898,11 @@ function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Staked Balance:</span>
-                      <strong style={{ color: '#fff', fontSize: '14px' }}>{userStakedUSDC.toFixed(2)} USDC</strong>
+                      <strong style={{ color: 'var(--text-main)', fontSize: '14px' }}>{userStakedUSDC.toFixed(2)} USDC</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Staker Equity Shares:</span>
-                      <strong style={{ color: '#fff', fontSize: '14px' }}>{userCoopShares.toFixed(2)} Shares</strong>
+                      <strong style={{ color: 'var(--text-main)', fontSize: '14px' }}>{userCoopShares.toFixed(2)} Shares</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Pool Ownership:</span>
@@ -5526,15 +5921,15 @@ function App() {
 
                   {/* Stake USDC Form */}
                   <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: '#fff' }}>Stake USDC</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Stake USDC</div>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                       <input
                         type="number"
-                        className="input-field"
+                        className="form-input"
                         placeholder="USDC amount to stake"
                         value={stakeAmount}
                         onChange={(e) => setStakeAmount(e.target.value)}
-                        style={{ fontSize: '13px', padding: '10px', flexGrow: 1 }}
+                        style={{ flexGrow: 1 }}
                       />
                       <button
                         className="btn btn-primary"
@@ -5545,23 +5940,26 @@ function App() {
                         {stakeLoading ? 'Staking...' : 'Stake USDC'}
                       </button>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      <span>Your Wallet: {usdcBalance.toFixed(2)} USDC</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <TokenIcon symbol="USDC" size={12} />
+                        Your Wallet: {usdcBalance.toFixed(2)} USDC
+                      </span>
                       <span style={{ cursor: 'pointer', color: 'var(--color-primary)' }} onClick={() => setStakeAmount(usdcBalance.toFixed(2))}>MAX</span>
                     </div>
                   </div>
 
                   {/* Unstake Shares Form */}
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: '#fff' }}>Unstake & Redeem Shares</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>Unstake & Redeem Shares</div>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                       <input
                         type="number"
-                        className="input-field"
+                        className="form-input"
                         placeholder="Shares to redeem"
                         value={unstakeShares}
                         onChange={(e) => setUnstakeShares(e.target.value)}
-                        style={{ fontSize: '13px', padding: '10px', flexGrow: 1 }}
+                        style={{ flexGrow: 1 }}
                       />
                       <button
                         className="btn btn-secondary"
@@ -5621,7 +6019,7 @@ function App() {
                       <Fingerprint size={40} color="var(--color-primary)" />
                     </div>
 
-                    <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: '#fff' }}>No Biometric Smart Account Found</h3>
+                    <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>No Biometric Smart Account Found</h3>
                     <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.5' }}>
                       Register your device's biometric key (FaceID, TouchID, or Windows Hello) to deploy a counterfactual smart contract wallet. This enables gasless, single-tap stream withdrawals.
                     </p>
@@ -5664,7 +6062,7 @@ function App() {
                       <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '8px' }}>
                         Biometric Smart Wallet Address
                       </div>
-                      <div style={{ fontSize: '15px', fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: '600', marginBottom: '16px', wordBreak: 'break-all', letterSpacing: '0.5px' }}>
+                      <div style={{ fontSize: '15px', fontFamily: 'var(--font-mono)', color: 'var(--text-main)', fontWeight: '600', marginBottom: '16px', wordBreak: 'break-all', letterSpacing: '0.5px' }}>
                         {passkeyAccountAddress}
                       </div>
 
@@ -5682,15 +6080,15 @@ function App() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1.5px solid rgba(255,255,255,0.05)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Credential ID:</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>{passkeyCredentialId ? `${passkeyCredentialId.slice(0, 10)}...${passkeyCredentialId.slice(-8)}` : 'N/A'}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyCredentialId ? `${passkeyCredentialId.slice(0, 10)}...${passkeyCredentialId.slice(-8)}` : 'N/A'}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Public Key X:</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>{passkeyPubKeyX ? `${passkeyPubKeyX.slice(0, 10)}...${passkeyPubKeyX.slice(-8)}` : 'N/A'}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyX ? `${passkeyPubKeyX.slice(0, 10)}...${passkeyPubKeyX.slice(-8)}` : 'N/A'}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Public Key Y:</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>{passkeyPubKeyY ? `${passkeyPubKeyY.slice(0, 10)}...${passkeyPubKeyY.slice(-8)}` : 'N/A'}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyY ? `${passkeyPubKeyY.slice(0, 10)}...${passkeyPubKeyY.slice(-8)}` : 'N/A'}</span>
                       </div>
                     </div>
 
@@ -5739,7 +6137,7 @@ function App() {
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '4px' }}>
                       Sponsorship Balance
                     </div>
-                    <div style={{ fontSize: '28px', color: '#fff', fontWeight: '700', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                    <div style={{ fontSize: '28px', color: 'var(--text-main)', fontWeight: '700', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
                       {paymasterSponsorBalance.toFixed(2)}
                       <span style={{ fontSize: '14px', color: 'var(--color-secondary)', fontWeight: '600' }}>USDC</span>
                     </div>
@@ -5758,7 +6156,7 @@ function App() {
                       <input
                         type="number"
                         placeholder="e.g. 50.00"
-                        className="form-control"
+                        className="form-input"
                         value={sponsorDepositAmount}
                         onChange={(e) => setSponsorDepositAmount(e.target.value)}
                         style={{ paddingRight: '60px' }}
@@ -5801,10 +6199,9 @@ function App() {
                    <div className="input-group">
                      <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-muted)' }}>Target Worker Wallet</label>
                      <select
-                       className="form-control"
+                       className="form-input"
                        value={selectedWorkerForConfig}
                        onChange={(e) => setSelectedWorkerForConfig(e.target.value)}
-                       style={{ background: 'var(--bg-card)', color: '#fff', border: '1.5px solid rgba(255,255,255,0.08)' }}
                      >
                        <option value="">-- Select Worker --</option>
                        {Array.from(new Set(employees.map(e => e.address))).filter(Boolean).map(workerAddr => (
@@ -5821,7 +6218,7 @@ function App() {
                        <input
                          type="number"
                          placeholder="e.g. 10"
-                         className="form-control"
+                         className="form-input"
                          value={maxTxLimitInput}
                          onChange={(e) => setMaxTxLimitInput(e.target.value)}
                        />
@@ -5831,7 +6228,7 @@ function App() {
                        <input
                          type="number"
                          placeholder="e.g. 50"
-                         className="form-control"
+                         className="form-input"
                          value={maxGasPriceInput}
                          onChange={(e) => setMaxGasPriceInput(e.target.value)}
                        />
@@ -5856,8 +6253,8 @@ function App() {
                  </form>
 
                  {/* Table of active rules */}
-                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-                   <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#fff', marginBottom: '12px' }}>Active Limits & Usage</h4>
+                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                   <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-main)', marginBottom: '12px' }}>Active Limits & Usage</h4>
                    
                    {Object.keys(workerRulesMap).length === 0 ? (
                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
@@ -5890,11 +6287,11 @@ function App() {
                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
                              <div>
                                <span style={{ color: 'var(--text-muted)' }}>Txs: </span>
-                               <span style={{ color: '#fff', fontWeight: '600' }}>{rule.txCountThisMonth} / {rule.maxTxPerMonth}</span>
+                               <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>{rule.txCountThisMonth} / {rule.maxTxPerMonth}</span>
                              </div>
                              <div>
                                <span style={{ color: 'var(--text-muted)' }}>Max Gas: </span>
-                               <span style={{ color: '#fff', fontWeight: '600' }}>{rule.maxGasPrice} Gwei</span>
+                               <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>{rule.maxGasPrice} Gwei</span>
                              </div>
                              <div style={{ gridColumn: 'span 2' }}>
                                <span style={{ color: 'var(--text-muted)' }}>Gas Sponsored: </span>
@@ -5922,11 +6319,11 @@ function App() {
               </p>
 
               {/* Table / List */}
-              {employees.filter(e => e.employee.toLowerCase() === passkeyAccountAddress?.toLowerCase()).length === 0 ? (
+              {employees.filter(e => (e.address || e.employee || '').toLowerCase() === passkeyAccountAddress?.toLowerCase()).length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '30px', border: '1.5px dashed rgba(255,255,255,0.08)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '14px' }}>
                   No active streaming channels are currently configured to route to your Biometric Smart Wallet ({passkeyAccountAddress || 'Not registered'}).
                   <br />
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '8px', display: 'inline-block' }}>Tip: Create a stream specifying your Smart Wallet address above as the employee.</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', display: 'inline-block' }}>Tip: Create a stream specifying your Smart Wallet address above as the employee.</span>
                 </div>
               ) : (
                 <div className="table-responsive">
@@ -5941,19 +6338,19 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {employees.filter(e => e.employee.toLowerCase() === passkeyAccountAddress?.toLowerCase()).map((emp) => (
+                      {employees.filter(e => (e.address || e.employee || '').toLowerCase() === passkeyAccountAddress?.toLowerCase()).map((emp) => (
                         <tr key={emp.id}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{emp.id.slice(0, 12)}...</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{emp.employer.slice(0, 6)}...{emp.employer.slice(-4)}</td>
-                          <td>{emp.fiatPeg ? `${emp.flowRate.toFixed(4)} ${emp.fiatPeg}/sec (Pegged)` : `${emp.flowRate.toFixed(4)} USDC/sec`}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{(emp.id || '').slice(0, 12)}...</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{emp.employer ? `${emp.employer.slice(0, 6)}...${emp.employer.slice(-4)}` : '0x0000...0000'}</td>
+                          <td>{emp.fiatPeg ? `${(emp.flowRate || 0).toFixed(4)} ${emp.fiatPeg}/sec (Pegged)` : `${(emp.flowRate || 0).toFixed(4)} USDC/sec`}</td>
                           <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>
-                            {emp.accruedLive.toFixed(4)} USDC
+                            {(emp.accruedLive || 0).toFixed(4)} USDC
                           </td>
                           <td>
                             <button
                               className="btn btn-primary btn-sm"
                               onClick={() => claimGaslessWithPasskey(emp.id, passkeyAccountAddress)}
-                              disabled={isPasskeyLoading || emp.accruedLive <= emp.accruedPaid}
+                              disabled={isPasskeyLoading || (emp.accruedLive || 0) <= (emp.accruedPaid || 0)}
                               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                             >
                               <Fingerprint size={12} />
@@ -5992,7 +6389,7 @@ function App() {
               </div>
 
               <div className="panel-card" style={{ marginTop: '12px', padding: '16px' }}>
-                <h5 style={{ color: '#fff', fontSize: '14px', marginBottom: '8px' }}>Payment Network Details</h5>
+                <h5 style={{ color: 'var(--text-main)', fontSize: '14px', marginBottom: '8px' }}>Payment Network Details</h5>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div><strong>Connection Status:</strong> Active (Secure)</div>
                   <div><strong>Processing Cost:</strong> Sponsored (Free)</div>
@@ -6028,6 +6425,7 @@ function App() {
           </div>
         )}
 
+        </div>
       </main>
 
       {/* Circle CCTP Portal Modal Overlay */}
@@ -6099,7 +6497,10 @@ function App() {
                 </p>
 
                 <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">Source Chain</label>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <NetworkIcon name={bridgeSourceChain} size={18} />
+                    Source Chain
+                  </label>
                   <select 
                     className="form-input" 
                     value={bridgeSourceChain} 
@@ -6108,6 +6509,18 @@ function App() {
                   >
                     <option value="Base Sepolia">Base Sepolia (CCTP Domain 6)</option>
                   </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0 16px', padding: '8px 12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '6px', border: '1px dashed var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <NetworkIcon name={bridgeSourceChain} size={16} />
+                    <span style={{ fontSize: '12px' }}>{bridgeSourceChain}</span>
+                  </div>
+                  <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <NetworkIcon name="Arc Testnet" size={16} />
+                    <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Arc Testnet (Destination)</span>
+                  </div>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '20px' }}>
@@ -6215,6 +6628,44 @@ function App() {
           </div>
         </div>
       )}
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="mobile-bottom-nav">
+        <button 
+          className={`mobile-bottom-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} 
+          onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
+        >
+          <Activity size={18} />
+          <span>Dashboard</span>
+        </button>
+        <button 
+          className={`mobile-bottom-nav-item ${activeTab === 'agents' ? 'active' : ''}`} 
+          onClick={() => { setActiveTab('agents'); setIsMobileSidebarOpen(false); }}
+        >
+          <Cpu size={18} />
+          <span>Agents</span>
+        </button>
+        <button 
+          className={`mobile-bottom-nav-item ${activeTab === 'streaming' ? 'active' : ''}`} 
+          onClick={() => { setActiveTab('streaming'); setIsMobileSidebarOpen(false); }}
+        >
+          <DollarSign size={18} />
+          <span>Streams</span>
+        </button>
+        <button 
+          className={`mobile-bottom-nav-item ${activeTab === 'coop' ? 'active' : ''}`} 
+          onClick={() => { setActiveTab('coop'); setIsMobileSidebarOpen(false); }}
+        >
+          <Layers size={18} />
+          <span>Staking</span>
+        </button>
+        <button 
+          className="mobile-bottom-nav-item" 
+          onClick={() => setIsMobileSidebarOpen(true)}
+        >
+          <Menu size={18} />
+          <span>More</span>
+        </button>
+      </nav>
 
     </div>
   )

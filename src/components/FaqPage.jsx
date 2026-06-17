@@ -1,10 +1,84 @@
 import React, { useState } from 'react';
-import { Zap, ArrowLeft, Search, HelpCircle, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { Zap, ArrowLeft, Search, HelpCircle, ChevronDown, ChevronUp, Layers, ChevronRight, BookOpen, HeartHandshake, Sliders } from 'lucide-react';
 
 export default function FaqPage({ onLaunchApp, navigateTo }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedIndex, setExpandedIndex] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
+
+  const renderAnswer = (faq) => {
+    if (faq.category === 'payroll') {
+      return (
+        <div>
+          <p>{faq.answer}</p>
+          <button 
+            onClick={(e) => { e.stopPropagation(); navigateTo('app', 'streaming'); }}
+            className="btn btn-secondary" 
+            style={{ padding: '6px 12px', fontSize: '11px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <span>Launch Salary Streams Setup</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+      );
+    }
+    if (faq.category === 'benefits') {
+      return (
+        <div>
+          <p>{faq.answer}</p>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); navigateTo('app', 'coop'); }}
+              className="btn btn-secondary" 
+              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <span>Visit Co-op Pool</span>
+              <ChevronRight size={12} />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); navigateTo('app', 'benefits'); }}
+              className="btn btn-outline" 
+              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', border: 'var(--thin-border)', borderRadius: '4px', background: 'none', cursor: 'pointer', fontWeight: '800' }}
+            >
+              <span>Configure HSA Splits</span>
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (faq.category === 'security' && faq.question.includes('Passkeys')) {
+      return (
+        <div>
+          <p>{faq.answer}</p>
+          <button 
+            onClick={(e) => { e.stopPropagation(); navigateTo('app', 'passkeys'); }}
+            className="btn btn-secondary" 
+            style={{ padding: '6px 12px', fontSize: '11px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <span>Setup Passkey Smart Wallet</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+      );
+    }
+    if (faq.category === 'security' && faq.question.includes('AI Verifier')) {
+      return (
+        <div>
+          <p>{faq.answer}</p>
+          <button 
+            onClick={(e) => { e.stopPropagation(); navigateTo('app', 'agents'); }}
+            className="btn btn-secondary" 
+            style={{ padding: '6px 12px', fontSize: '11px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <span>Open Agent Command Center</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+      );
+    }
+    return <p>{faq.answer}</p>;
+  };
 
   const faqs = [
     {
@@ -106,6 +180,13 @@ export default function FaqPage({ onLaunchApp, navigateTo }) {
         </div>
       </header>
 
+      {/* Breadcrumbs */}
+      <div className="breadcrumb-container">
+        <span className="breadcrumb-item" onClick={() => navigateTo('home')}>Home</span>
+        <span className="breadcrumb-separator"><ChevronRight size={10} /></span>
+        <span className="breadcrumb-item active">FAQ Helpdesk</span>
+      </div>
+
       {/* Main Content */}
       <main style={{ maxWidth: '800px', width: '100%', margin: '40px auto', padding: '0 24px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '30px' }}>
         
@@ -195,7 +276,7 @@ export default function FaqPage({ onLaunchApp, navigateTo }) {
                       color: 'var(--text-muted)',
                       fontWeight: '500' 
                     }}>
-                      {faq.answer}
+                      {renderAnswer(faq)}
                     </div>
                   )}
                 </div>
@@ -206,6 +287,69 @@ export default function FaqPage({ onLaunchApp, navigateTo }) {
               No matches found for your search query. Try typing another term.
             </div>
           )}
+        </div>
+
+        {/* Related Pages Section */}
+        <div className="related-section">
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '900', textTransform: 'uppercase', color: 'var(--text-main)', marginBottom: '8px' }}>
+            Related Resources
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            Explore other developer resources and channels of the NexaFlow continuous payroll ecosystem.
+          </p>
+          
+          <div className="related-grid">
+            <div className="related-card" onClick={() => navigateTo('docs')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  <BookOpen size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>API Guide</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>DEVELOPER DOCUMENTATION</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Access integration snippets, ABI specs, smart contract registers, and the native USDC gas mechanics of Arc Chain.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Read Docs</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('about')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '8px' }}>
+                  <HeartHandshake size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Our Mission</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>PHILOSOPHY & VALUES</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Learn about our decentralized benefits thesis, target demographics, and why continuous finance is essential for remote teams.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-success)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>View About Us</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('contact')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-secondary)', marginBottom: '8px' }}>
+                  <Sliders size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Integration Support</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>HELP & INQUIRIES</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Contact our sandbox integration technicians or compliance officers to configure splits for your corporate workspace.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-secondary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Submit Inquiry</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+          </div>
         </div>
 
       </main>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Zap, ArrowLeft, Terminal, Code, Copy, Check, FileText, Cpu, BookOpen } from 'lucide-react';
+import { Zap, ArrowLeft, Terminal, Code, Copy, Check, FileText, Cpu, BookOpen, ChevronRight, HelpCircle, HeartHandshake, Sliders } from 'lucide-react';
+import { NetworkIcon } from './Icons';
 
 export default function DocsPage({ onLaunchApp, navigateTo }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
@@ -145,6 +146,13 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
         </div>
       </header>
 
+      {/* Breadcrumbs */}
+      <div className="breadcrumb-container">
+        <span className="breadcrumb-item" onClick={() => navigateTo('home')}>Home</span>
+        <span className="breadcrumb-separator"><ChevronRight size={10} /></span>
+        <span className="breadcrumb-item active">Developer Documentation</span>
+      </div>
+
       {/* Main content grid */}
       <main className="docs-main-grid">
         
@@ -209,17 +217,32 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
                 <tbody>
                   <tr>
                     <td style={{ fontWeight: '800' }}>StreamingPayroll</td>
-                    <td>Arc Testnet</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <NetworkIcon name="Arc Testnet" size={14} />
+                        <span>Arc Testnet</span>
+                      </div>
+                    </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>0xC8f71FCDD3bDeaC7601f0DE727b165b4c10aBD2c</td>
                   </tr>
                   <tr>
                     <td style={{ fontWeight: '800' }}>MicroBenefitsVault</td>
-                    <td>Arc Testnet</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <NetworkIcon name="Arc Testnet" size={14} />
+                        <span>Arc Testnet</span>
+                      </div>
+                    </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>0xe6Cc45e2270929281aCbF499424D0F8dca9D5184</td>
                   </tr>
                   <tr>
                     <td style={{ fontWeight: '800' }}>USDC ERC-20 Gas</td>
-                    <td>Arc Testnet</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <NetworkIcon name="Arc Testnet" size={14} />
+                        <span>Arc Testnet</span>
+                      </div>
+                    </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>0x3600000000000000000000000000000000000000</td>
                   </tr>
                 </tbody>
@@ -267,6 +290,69 @@ async function deployNewStream(employeeAddress: string, flowRatePerSec: number, 
               ))}
             </div>
           </section>
+
+          {/* Related Pages Section */}
+          <div className="related-section">
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '900', textTransform: 'uppercase', color: 'var(--text-main)', marginBottom: '8px' }}>
+              Related Resources
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Explore other areas of the NexaFlow continuous payroll and micro-benefits platform.
+            </p>
+            
+            <div className="related-grid">
+              <div className="related-card" onClick={() => navigateTo('app', 'contracts')}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                    <Code size={16} />
+                    <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Visual Spec Sandbox</span>
+                  </div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>SOLIDITY SMART CONTRACTS</h4>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    Inspect full compilable Solidity source code for StreamingPayroll and MicroBenefitsVault directly inside the sandbox viewer.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                  <span>Open Code Viewer</span>
+                  <ChevronRight size={12} />
+                </div>
+              </div>
+
+              <div className="related-card" onClick={() => navigateTo('faq')}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '8px' }}>
+                    <HelpCircle size={16} />
+                    <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Faq Helpdesk</span>
+                  </div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>COMMON OPERATIONS</h4>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    Learn about biometric TouchID/FaceID enclaves, gas sponsorship mechanisms on the Arc L2 chain, and co-op staking metrics.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-success)', textTransform: 'uppercase', marginTop: '12px' }}>
+                  <span>Browse FAQ</span>
+                  <ChevronRight size={12} />
+                </div>
+              </div>
+
+              <div className="related-card" onClick={() => navigateTo('contact')}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-secondary)', marginBottom: '8px' }}>
+                    <Sliders size={16} />
+                    <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Integration Support</span>
+                  </div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>HELP & INQUIRIES</h4>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    Contact our sandbox integration technicians or compliance officers to configure splits for your corporate workspace.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-secondary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                  <span>Submit Inquiry</span>
+                  <ChevronRight size={12} />
+                </div>
+              </div>
+            </div>
+          </div>
 
         </div>
       </main>

@@ -26,8 +26,9 @@ import {
   Eye,
   Server,
 } from 'lucide-react';
+import { TokenIcon } from './Icons';
 
-const AGENT_SERVER_URL = 'http://localhost:3002';
+const AGENT_SERVER_URL = 'http://localhost:3012';
 
 // Agent identity colors and icons
 const AGENT_CONFIG = {
@@ -144,7 +145,7 @@ function AgentCommandCenter() {
       {/* Header Section */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
             <Brain size={24} color="#a78bfa" />
             Agent Command Center
           </h2>
@@ -183,7 +184,7 @@ function AgentCommandCenter() {
             backgroundColor: serverStatus ? '#34d399' : '#ef4444',
             boxShadow: serverStatus ? '0 0 8px rgba(52, 211, 153, 0.6)' : '0 0 8px rgba(239, 68, 68, 0.6)',
           }} />
-          <span style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>
             {serverStatus ? 'Agent Server Online' : 'Agent Server Offline'}
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -210,8 +211,8 @@ function AgentCommandCenter() {
 
           return (
             <div key={agentName} style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1.5px solid rgba(255,255,255,0.06)',
+              background: 'rgba(26,26,26,0.02)',
+              border: '1.5px solid rgba(26,26,26,0.08)',
               borderRadius: '12px',
               padding: '16px',
               position: 'relative',
@@ -234,7 +235,7 @@ function AgentCommandCenter() {
                 </span>
               </div>
 
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
+              <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>
                 ${remaining.toLocaleString()}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
@@ -243,7 +244,7 @@ function AgentCommandCenter() {
 
               {/* Progress bar */}
               <div style={{
-                height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.06)',
+                height: '4px', borderRadius: '2px', background: 'rgba(26,26,26,0.08)',
               }}>
                 <div style={{
                   height: '100%', borderRadius: '2px',
@@ -287,8 +288,8 @@ function AgentCommandCenter() {
                 return (
                   <div key={entry.id} style={{
                     display: 'flex', gap: '10px', padding: '10px 12px',
-                    background: 'rgba(255,255,255,0.02)',
-                    border: '1px solid rgba(255,255,255,0.04)',
+                    background: 'rgba(26,26,26,0.02)',
+                    border: '1px solid rgba(26,26,26,0.08)',
                     borderRadius: '8px',
                     borderLeft: `3px solid ${config.color}`,
                   }}>
@@ -307,7 +308,7 @@ function AgentCommandCenter() {
                           {new Date(entry.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
-                      <div style={{ fontSize: '11px', fontWeight: '600', color: '#fff', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-main)', marginBottom: '2px' }}>
                         {entry.action}
                       </div>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -339,13 +340,22 @@ function AgentCommandCenter() {
                 { label: 'Avg Payment', value: `$${(nanopaymentStats?.averagePaymentUsdc || 0).toFixed(6)}`, color: '#f472b6' },
               ].map((stat, i) => (
                 <div key={i} style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
+                  background: 'rgba(26,26,26,0.02)',
+                  border: '1px solid rgba(26,26,26,0.08)',
                   borderRadius: '8px',
                   padding: '12px',
                   textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}>
-                  <div style={{ fontSize: '18px', fontWeight: '700', color: stat.color }}>{stat.value}</div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: stat.color, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {(stat.label.includes('USDC') || stat.label.includes('Payment')) && (
+                      <TokenIcon symbol="USDC" size={14} />
+                    )}
+                    {stat.value}
+                  </div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>{stat.label}</div>
                 </div>
               ))}
@@ -367,7 +377,7 @@ function AgentCommandCenter() {
               ].map((ep, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px',
-                  background: 'rgba(255,255,255,0.02)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)',
+                  background: 'rgba(26,26,26,0.02)', borderRadius: '6px', border: '1px solid rgba(26,26,26,0.08)',
                 }}>
                   <span className="badge" style={{
                     background: ep.method === 'POST' ? 'rgba(167, 139, 250, 0.15)' : 'rgba(0, 242, 254, 0.15)',
@@ -376,7 +386,7 @@ function AgentCommandCenter() {
                   }}>
                     {ep.method}
                   </span>
-                  <span style={{ fontSize: '11px', color: '#fff', fontFamily: 'var(--font-mono)', flex: 1 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-main)', fontFamily: 'var(--font-mono)', flex: 1 }}>
                     {ep.path}
                   </span>
                   <span style={{ fontSize: '11px', fontWeight: '700', color: '#34d399' }}>
@@ -403,7 +413,7 @@ function AgentCommandCenter() {
                   {[...nanopaymentLedger].reverse().slice(0, 10).map((tx, i) => (
                     <div key={i} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '6px 8px', fontSize: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      padding: '6px 8px', fontSize: '10px', borderBottom: '1px solid rgba(26, 26, 26, 0.08)',
                     }}>
                       <span style={{ color: tx.type === 'DEPOSIT' ? '#34d399' : '#f472b6', fontWeight: '600' }}>
                         {tx.type === 'DEPOSIT' ? '⬆ DEPOSIT' : '⬇ PAYMENT'}
@@ -411,7 +421,7 @@ function AgentCommandCenter() {
                       <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {tx.buyer?.slice(0, 8)}...
                       </span>
-                      <span style={{ color: '#fff', fontWeight: '600' }}>
+                      <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>
                         {tx.type === 'DEPOSIT' ? '+' : '-'}${tx.amount?.toFixed(6)}
                       </span>
                     </div>
@@ -461,25 +471,25 @@ function AgentCommandCenter() {
         gap: '16px',
       }}>
         <div className="panel-card" style={{ padding: '16px' }}>
-          <h5 style={{ fontSize: '13px', fontWeight: '700', color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <h5 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Fingerprint size={14} color="#a78bfa" />
             ERC-8004 Agent Identity Registry
           </h5>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div><strong style={{ color: '#fff' }}>Identity:</strong> <code style={{ color: '#a78bfa' }}>0x8004A818...BD9e</code></div>
-            <div><strong style={{ color: '#fff' }}>Reputation:</strong> <code style={{ color: '#a78bfa' }}>0x8004B663...8713</code></div>
-            <div><strong style={{ color: '#fff' }}>Validation:</strong> <code style={{ color: '#a78bfa' }}>0x8004Cb1B...4272</code></div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Identity:</strong> <code style={{ color: '#a78bfa' }}>0x8004A818...BD9e</code></div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Reputation:</strong> <code style={{ color: '#a78bfa' }}>0x8004B663...8713</code></div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Validation:</strong> <code style={{ color: '#a78bfa' }}>0x8004Cb1B...4272</code></div>
           </div>
         </div>
         <div className="panel-card" style={{ padding: '16px' }}>
-          <h5 style={{ fontSize: '13px', fontWeight: '700', color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <h5 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Bot size={14} color="#00f2fe" />
             ERC-8183 Agentic Commerce
           </h5>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div><strong style={{ color: '#fff' }}>Contract:</strong> <code style={{ color: '#00f2fe' }}>0x0747EEf0...4583</code></div>
-            <div><strong style={{ color: '#fff' }}>Job Flow:</strong> Create → Fund → Submit → Complete</div>
-            <div><strong style={{ color: '#fff' }}>Protocol:</strong> USDC escrow with agent arbitration</div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Contract:</strong> <code style={{ color: '#00f2fe' }}>0x0747EEf0...4583</code></div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Job Flow:</strong> Create → Fund → Submit → Complete</div>
+            <div><strong style={{ color: 'var(--text-main)' }}>Protocol:</strong> USDC escrow with agent arbitration</div>
           </div>
         </div>
       </div>

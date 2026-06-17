@@ -18,6 +18,7 @@ import {
   Clock,
   X
 } from 'lucide-react';
+import { TokenIcon } from './Icons';
 
 export default function LandingPage({ onLaunchApp, navigateTo }) {
   const [email, setEmail] = useState('');
@@ -250,7 +251,11 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
                 marginTop: '6px',
                 color: 'var(--text-main)'
               }}>
-                ${tickerBalance.toFixed(6)} <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>USDC</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  <TokenIcon symbol="USDC" size={24} />
+                  <span>{tickerBalance.toFixed(6)}</span>
+                  <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>USDC</span>
+                </span>
               </div>
             </div>
 
@@ -711,9 +716,9 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
           <div>
             <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: '16px' }}>Product</h4>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', padding: 0 }}>
-              <li><button onClick={onLaunchApp} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">Dashboard</button></li>
-              <li><button onClick={onLaunchApp} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">AI Agent Center</button></li>
-              <li><button onClick={onLaunchApp} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">Salary Streams</button></li>
+              <li><button onClick={() => onLaunchApp('dashboard')} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">Dashboard</button></li>
+              <li><button onClick={() => onLaunchApp('agents')} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">AI Agent Center</button></li>
+              <li><button onClick={() => onLaunchApp('streaming')} style={{ background: 'none', border: 'none', color: '#D4D4D8', cursor: 'pointer', padding: 0 }} className="hover-underline">Salary Streams</button></li>
             </ul>
           </div>
 

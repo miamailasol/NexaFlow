@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, ArrowLeft, ShieldCheck, Scale, FileText } from 'lucide-react';
+import { Zap, ArrowLeft, ShieldCheck, Scale, FileText, ChevronRight } from 'lucide-react';
 
 export default function LegalPages({ mode, onLaunchApp, navigateTo }) {
   const isPrivacy = mode === 'privacy';
@@ -58,6 +58,13 @@ export default function LegalPages({ mode, onLaunchApp, navigateTo }) {
           </button>
         </div>
       </header>
+
+      {/* Breadcrumbs */}
+      <div className="breadcrumb-container">
+        <span className="breadcrumb-item" onClick={() => navigateTo('home')}>Home</span>
+        <span className="breadcrumb-separator"><ChevronRight size={10} /></span>
+        <span className="breadcrumb-item active">{isPrivacy ? "Privacy Policy" : "Terms of Service"}</span>
+      </div>
 
       {/* Main Content */}
       <main style={{ maxWidth: '800px', width: '100%', margin: '40px auto', padding: '0 24px', textAlign: 'left' }}>

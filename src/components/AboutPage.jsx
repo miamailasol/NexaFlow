@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, ArrowLeft, HeartHandshake, Compass, Users, Scale, ShieldAlert } from 'lucide-react';
+import { Zap, ArrowLeft, HeartHandshake, Compass, Users, Scale, ShieldAlert, ChevronRight, BookOpen, HelpCircle, Sliders } from 'lucide-react';
 
 export default function AboutPage({ onLaunchApp, navigateTo }) {
   const coreValues = [
@@ -76,6 +76,13 @@ export default function AboutPage({ onLaunchApp, navigateTo }) {
         </div>
       </header>
 
+      {/* Breadcrumbs */}
+      <div className="breadcrumb-container">
+        <span className="breadcrumb-item" onClick={() => navigateTo('home')}>Home</span>
+        <span className="breadcrumb-separator"><ChevronRight size={10} /></span>
+        <span className="breadcrumb-item active">About NexaFlow</span>
+      </div>
+
       {/* Main Content */}
       <main style={{ maxWidth: '850px', width: '100%', margin: '40px auto', padding: '0 24px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '32px' }}>
         
@@ -142,6 +149,69 @@ export default function AboutPage({ onLaunchApp, navigateTo }) {
             </p>
           </div>
         </section>
+
+        {/* Related Pages Section */}
+        <div className="related-section">
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '900', textTransform: 'uppercase', color: 'var(--text-main)', marginBottom: '8px' }}>
+            Related Resources
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            Learn more about integrating NexaFlow streaming salary escrows and enclaves.
+          </p>
+          
+          <div className="related-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div className="related-card" onClick={() => navigateTo('docs')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  <BookOpen size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>API Guide</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>DEVELOPER API DOCS</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Access integration snippets, ABI specs, smart contract registers, and the native USDC gas mechanics of Arc Chain.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Read Docs</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('faq')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '8px' }}>
+                  <HelpCircle size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Common Questions</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>FAQ HELPDESK</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Learn about biometric TouchID/FaceID enclaves, gas sponsorship mechanisms on the Arc L2 chain, and co-op staking metrics.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-success)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Browse FAQ</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+
+            <div className="related-card" onClick={() => navigateTo('contact')}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-secondary)', marginBottom: '8px' }}>
+                  <Sliders size={16} />
+                  <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>Integration Support</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>HELP & INQUIRIES</h4>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Contact our sandbox integration technicians or compliance officers to configure splits for your corporate workspace.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--color-secondary)', textTransform: 'uppercase', marginTop: '12px' }}>
+                <span>Submit Inquiry</span>
+                <ChevronRight size={12} />
+              </div>
+            </div>
+          </div>
+        </div>
 
       </main>
     </div>

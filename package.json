@@ -9,15 +9,19 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node --env-file=.env server/index.js",
-    "dev:all": "npx concurrently \"npm run dev\" \"npm run server\""
+    "treasury": "node --env-file=.env scripts/circle-dcw-service.js",
+    "dev:all": "npx concurrently \"npm run dev\" \"npm run server\" \"npm run treasury\""
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "^10.6.0",
+    "@circle-fin/x402-batching": "^3.1.2",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
     "@langchain/openai": "^1.4.7",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "^5.100.11",
+    "@x402/core": "^2.15.0",
+    "@x402/evm": "^2.15.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "langsmith": "^0.7.8",
