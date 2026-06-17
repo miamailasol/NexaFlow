@@ -247,7 +247,6 @@ body {
 .main-content {
   flex-grow: 1;
   padding: 40px;
-  max-width: 1450px;
   width: calc(100% - 290px);
   overflow-y: auto;
   overflow-x: hidden;
