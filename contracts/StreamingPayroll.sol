@@ -104,6 +104,10 @@ contract StreamingPayroll {
     mapping(address => uint256) public employerBalances;
     mapping(bytes32 => address) public targetPayoutTokens;
 
+    // Referral System
+    mapping(address => address) public referrers;
+    mapping(address => uint32) public referralBonuses; // basis points (e.g. 50 = 0.5%)
+
     mapping(string => uint256) public taxRates; // basis points (e.g. 1500 = 15%)
     mapping(string => address) public taxAuthorities; // government wallet addresses
     mapping(bytes32 => string) public streamCountries;
@@ -144,6 +148,7 @@ contract StreamingPayroll {
     event FiatPegUpdated(bytes32 indexed streamId, string fiatPeg);
     event PriceFeedUpdated(string fiatCurrency, address oracleAddress);
     event TreasuryBufferManagerUpdated(address indexed bufferManager);
+    event ReferralRegistered(address indexed employee, address indexed referrer, uint32 bonusBasisPoints);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -211,6 +216,16 @@ contract StreamingPayroll {
     function setTreasuryBufferManager(address _treasuryBufferManager) external onlyOwner {
         treasuryBufferManager = _treasuryBufferManager;
         emit TreasuryBufferManagerUpdated(_treasuryBufferManager);
+    }
+
+    function setReferral(address employee, address referrer, uint32 bonusBasisPoints) external onlyOwner {
+        require(employee != address(0), "Invalid employee address");
+        require(referrer != address(0), "Invalid referrer address");
+        require(referrer != employee, "Cannot refer yourself");
+        require(bonusBasisPoints <= 500, "Bonus cannot exceed 5%");
+        referrers[employee] = referrer;
+        referralBonuses[employee] = bonusBasisPoints;
+        emit ReferralRegistered(employee, referrer, bonusBasisPoints);
     }
 
     function setTargetPayoutToken(bytes32 streamId, address token) external onlyCleared(msg.sender) {
@@ -403,18 +418,32 @@ contract StreamingPayroll {
         uint256 taxRate = taxRates[country];
         address taxAuthority = taxAuthorities[country];
 
+        // Calculate referral split
+        address referrer = referrers[stream.employee];
+        uint256 referralBonus = 0;
+        if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
+            referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
+        }
+
         uint256 taxAmount = 0;
-        uint256 employeeAmount = claimable - coopFee;
+        uint256 employeeAmount = claimable - coopFee - referralBonus;
 
         if (taxRate > 0 && taxAuthority != address(0)) {
             taxAmount = (claimable * taxRate) / 10000;
-            employeeAmount = claimable - taxAmount - coopFee;
+            employeeAmount = claimable - taxAmount - coopFee - referralBonus;
         }
 
         if (taxAmount > 0) {
             require(
                 IERC20(usdcToken).transfer(taxAuthority, taxAmount),
                 "USDC tax transfer failed"
+            );
+        }
+
+        if (referralBonus > 0) {
+            require(
+                IERC20(usdcToken).transfer(referrer, referralBonus),
+                "USDC referral transfer failed"
             );
         }
 
@@ -476,7 +505,12 @@ contract StreamingPayroll {
         // Send accrued to employee
         if (claimable > 0) {
             uint256 coopFee = _routeCoopFee(claimable);
-            uint256 employeeAmount = claimable - coopFee;
+            address referrer = referrers[stream.employee];
+            uint256 referralBonus = 0;
+            if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
+                referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
+            }
+            uint256 employeeAmount = claimable - coopFee - referralBonus;
             address targetToken = targetPayoutTokens[streamId];
             if (targetToken != address(0) && targetToken != usdcToken) {
                 require(swapRouter != address(0), "Swap router not set");
@@ -499,6 +533,12 @@ contract StreamingPayroll {
                 require(
                     IERC20(usdcToken).transfer(stream.employee, employeeAmount),
                     "USDC transfer to employee failed"
+                );
+            }
+            if (referralBonus > 0) {
+                require(
+                    IERC20(usdcToken).transfer(referrer, referralBonus),
+                    "USDC referral transfer failed"
                 );
             }
             emit FundsWithdrawn(streamId, stream.employee, claimable);
@@ -768,18 +808,31 @@ contract StreamingPayroll {
                 uint256 taxRate = taxRates[country];
                 address taxAuthority = taxAuthorities[country];
 
+                address referrer = referrers[stream.employee];
+                uint256 referralBonus = 0;
+                if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
+                    referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
+                }
+
                 uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable - coopFee;
+                uint256 employeeAmount = claimable - coopFee - referralBonus;
 
                 if (taxRate > 0 && taxAuthority != address(0)) {
                     taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount - coopFee;
+                    employeeAmount = claimable - taxAmount - coopFee - referralBonus;
                 }
 
                 if (taxAmount > 0) {
                     require(
                         IERC20(usdcToken).transfer(taxAuthority, taxAmount),
                         "USDC tax transfer failed"
+                    );
+                }
+
+                if (referralBonus > 0) {
+                    require(
+                        IERC20(usdcToken).transfer(referrer, referralBonus),
+                        "USDC referral transfer failed"
                     );
                 }
 
@@ -862,18 +915,31 @@ contract StreamingPayroll {
                 uint256 taxRate = taxRates[country];
                 address taxAuthority = taxAuthorities[country];
 
+                address referrer = referrers[stream.employee];
+                uint256 referralBonus = 0;
+                if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
+                    referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
+                }
+
                 uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable - coopFee;
+                uint256 employeeAmount = claimable - coopFee - referralBonus;
 
                 if (taxRate > 0 && taxAuthority != address(0)) {
                     taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount - coopFee;
+                    employeeAmount = claimable - taxAmount - coopFee - referralBonus;
                 }
 
                 if (taxAmount > 0) {
                     require(
                         IERC20(usdcToken).transfer(taxAuthority, taxAmount),
                         "USDC tax transfer failed"
+                    );
+                }
+
+                if (referralBonus > 0) {
+                    require(
+                        IERC20(usdcToken).transfer(referrer, referralBonus),
+                        "USDC referral transfer failed"
                     );
                 }
 
@@ -1050,18 +1116,31 @@ contract StreamingPayroll {
         uint256 taxRate = taxRates[country];
         address taxAuthority = taxAuthorities[country];
 
+        address referrer = referrers[stream.employee];
+        uint256 referralBonus = 0;
+        if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
+            referralBonus = (payout * referralBonuses[stream.employee]) / 10000;
+        }
+
         uint256 taxAmount = 0;
-        uint256 employeeAmount = payout - coopFee;
+        uint256 employeeAmount = payout - coopFee - referralBonus;
 
         if (taxRate > 0 && taxAuthority != address(0)) {
             taxAmount = (payout * taxRate) / 10000;
-            employeeAmount = payout - taxAmount - coopFee;
+            employeeAmount = payout - taxAmount - coopFee - referralBonus;
         }
 
         if (taxAmount > 0) {
             require(
                 IERC20(usdcToken).transfer(taxAuthority, taxAmount),
                 "USDC tax transfer failed"
+            );
+        }
+
+        if (referralBonus > 0) {
+            require(
+                IERC20(usdcToken).transfer(referrer, referralBonus),
+                "USDC referral transfer failed"
             );
         }
 
