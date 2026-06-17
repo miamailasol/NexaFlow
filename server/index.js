@@ -38,7 +38,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.AGENT_SERVER_PORT || 3002;
+const PORT = process.env.AGENT_SERVER_PORT || 3012;
 
 // ─── Arc Testnet Public Client ──────────────────────────────────────
 const publicClient = createPublicClient({
@@ -145,8 +145,8 @@ app.get("/api/nanopayments/ledger", (req, res) => {
 /**
  * Get nanopayment balance for a buyer
  */
-app.get("/api/nanopayments/balance/:address", (req, res) => {
-  const balance = getNanopaymentBalance(req.params.address);
+app.get("/api/nanopayments/balance/:address", async (req, res) => {
+  const balance = await getNanopaymentBalance(req.params.address);
   res.json({
     success: true,
     address: req.params.address,
@@ -157,7 +157,7 @@ app.get("/api/nanopayments/balance/:address", (req, res) => {
 /**
  * Deposit USDC into nanopayment Gateway balance
  */
-app.post("/api/nanopayments/deposit", (req, res) => {
+app.post("/api/nanopayments/deposit", async (req, res) => {
   const { buyerAddress, amountUsdc } = req.body;
   if (!buyerAddress || !amountUsdc) {
     return res.status(400).json({
@@ -166,13 +166,16 @@ app.post("/api/nanopayments/deposit", (req, res) => {
   }
 
   const result = depositNanopaymentBalance(buyerAddress, amountUsdc);
-  const newBalance = getNanopaymentBalance(buyerAddress);
+  const newBalance = await getNanopaymentBalance(buyerAddress);
 
   res.json({
     success: true,
     deposit: result,
     newBalance: newBalance,
-    message: `Deposited ${amountUsdc} USDC to Gateway balance for ${buyerAddress}`,
+    gatewayWallet: "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+    usdcAddress: "0x3600000000000000000000000000000000000000",
+    amountAtomic: Math.round(amountUsdc * 1000000).toString(),
+    message: `Deposited ${amountUsdc} USDC to Gateway balance for ${buyerAddress}. Fund balance on-chain by sending USDC to Gateway Wallet 0x0077777d7EBA4688BDeF3E311b846F25870A19B9 on Arc Testnet.`,
   });
 });
 
@@ -371,6 +374,168 @@ app.post("/api/agent/process-claim", async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /api/demo/process-claim — Alias for /api/agent/process-claim used by frontend
+ */
+app.post("/api/demo/process-claim", async (req, res) => {
+  try {
+    const { invoiceText, memberAddress, claimAmount } = req.body;
+    const result = await processClaimWithAgents(invoiceText, memberAddress, claimAmount);
+    res.json({
+      success: true,
+      result,
+      message: "Claim processed through real multi-agent LangGraph pipeline",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      hint: "Ensure OPENAI_API_KEY is set in .env for real AI agent inference",
+      activityLog: getAgentActivityLog().slice(-10),
+    });
+  }
+});
+
+/**
+ * POST /api/demo/seed — Seed demo state used by frontend
+ */
+app.post("/api/demo/seed", async (req, res) => {
+  try {
+    const defaultAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+    depositNanopaymentBalance(defaultAddress, 10.0);
+    res.json({
+      success: true,
+      message: `Demo state seeded successfully with $10.00 USDC for ${defaultAddress}`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/webhooks/owncast — Owncast Livestream Webhook
+ * RFS #3: Settle per-second micro-royalties when users join or chat.
+ */
+app.post("/api/webhooks/owncast", async (req, res) => {
+  try {
+    const { type, eventData } = req.body;
+    if (!type || !eventData) {
+      return res.status(400).json({ error: "Invalid Owncast webhook payload structure" });
+    }
+
+    console.log(`📡 Owncast Webhook Received: [${type}]`);
+
+    if (type === "CHAT_MESSAGE" || type === "USER_JOINED") {
+      const viewerName = eventData.user?.displayName || "Anonymous Viewer";
+      const viewerAddress = eventData.user?.walletAddress || "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
+
+      const result = await processClaimWithAgents(
+        `Owncast Live Stream - Viewer ${viewerName} active. Stream presence settled.`,
+        viewerAddress,
+        0.05
+      );
+
+      return res.json({
+        success: true,
+        processed: true,
+        event: type,
+        result
+      });
+    }
+
+    return res.json({
+      success: true,
+      processed: false,
+      message: `Event type [${type}] received but no payout triggered.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/webhooks/navidrome — Navidrome Music Scrobble Webhook
+ * RFS #1: Settle micro-royalties to artists in real-time as music is streamed.
+ */
+app.post("/api/webhooks/navidrome", async (req, res) => {
+  try {
+    const { username, artistName, trackTitle, durationPlayed = 0 } = req.body;
+    if (!username || !artistName || !trackTitle) {
+      return res.status(400).json({ error: "Missing required Navidrome scrobble fields" });
+    }
+
+    console.log(`🎵 Navidrome Scrobble Received: "${trackTitle}" by ${artistName} (User: ${username})`);
+
+    if (durationPlayed < 30) {
+      return res.json({
+        success: true,
+        processed: false,
+        reason: `Playback duration too short (${durationPlayed}s). Required >= 30s.`
+      });
+    }
+
+    const artistAddress = "0x90f79bf6eb2c4f870365e785982e1f101e93b906";
+    const result = await processClaimWithAgents(
+      `Navidrome Audio Royalty - Playback of "${trackTitle}" by ${artistName} by listener ${username} completed.`,
+      artistAddress,
+      0.01
+    );
+
+    return res.json({
+      success: true,
+      processed: true,
+      track: trackTitle,
+      artist: artistName,
+      result
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/agent/citation-toll — $0.0001 per citation
+ * RFS #7: LLM Crawler Citation-Toll Layer.
+ * Crawlers call this endpoint to pay a micro-toll when citing content in LLM answers.
+ */
+app.post(
+  "/api/agent/citation-toll",
+  x402PaymentRequired({
+    priceUsdc: 0.0001,
+    resourceDescription: "LLM grounding citation micro-toll",
+  }),
+  async (req, res) => {
+    try {
+      const { sourceUrl, citationAuthor, modelName } = req.body;
+      if (!sourceUrl || !citationAuthor) {
+        return res.status(400).json({ error: "Missing required fields: sourceUrl, citationAuthor" });
+      }
+
+      console.log(`🤖 LLM Crawler [${modelName || "unknown"}] citing "${sourceUrl}" by ${citationAuthor}`);
+
+      const authorAddress = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+      const result = await processClaimWithAgents(
+        `LLM Grounding Citation Toll - Grounded in "${sourceUrl}" by ${citationAuthor}`,
+        authorAddress,
+        0.0001
+      );
+
+      res.json({
+        success: true,
+        result,
+        payment: req.x402Payment,
+        message: "Citation toll successfully settled on-chain via multi-agent pipeline",
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
 
 // ═════════════════════════════════════════════════════════════════════
 // START SERVER

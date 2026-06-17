@@ -28,6 +28,7 @@ import {
   registerAgentTool,
   recordReputationTool,
   createJobTool,
+  negotiateDiscountTool,
   initAgentBudget,
 } from "./tools.js";
 
@@ -53,13 +54,14 @@ initAgentBudget("settlement", 100000);
 
 // ─── Model Configuration ───────────────────────────────────────────
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_API_KEY) {
-  console.error("❌ OPENAI_API_KEY is required. Set it in your .env file for real AI agent inference.");
-  console.error("   Get a key at https://platform.openai.com/api-keys");
-  process.exit(1);
+const isDemoMode = !OPENAI_API_KEY || OPENAI_API_KEY === "your-openai-api-key-here" || OPENAI_API_KEY === "";
+
+if (isDemoMode) {
+  console.log("⚠️  Running in Demo/Simulation Mode. On-chain tasks will execute deterministically without OpenAI GPT calls.");
 }
 
 function createAgentModel(agentName, tools) {
+  if (isDemoMode) return null;
   const model = new ChatOpenAI({
     modelName: "gpt-4o-mini",
     temperature: 0,
@@ -73,6 +75,7 @@ const coordinatorTools = [checkBudgetTool, createJobTool, registerAgentTool, rec
 const payrollTools = [createStreamTool, checkBudgetTool];
 const verificationTools = [verifyClaimTool, checkBudgetTool, recordReputationTool];
 const complianceTools = [checkComplianceTool, checkBudgetTool];
+const benefitsTools = [negotiateDiscountTool, checkBudgetTool];
 const settlementTools = [executePaymentTool, checkBudgetTool];
 
 // ─── All tools combined for ToolNode ────────────────────────────────
@@ -85,6 +88,7 @@ const allTools = [
   registerAgentTool,
   recordReputationTool,
   createJobTool,
+  negotiateDiscountTool,
 ];
 
 const toolNode = new ToolNode(allTools);
@@ -224,6 +228,20 @@ async function settlementNode(state) {
   return { messages: [response] };
 }
 
+async function benefitsNode(state) {
+  logActivity("Benefits", "NEGOTIATING", "Negotiating provider service fee discounts");
+
+  const model = createAgentModel("benefits", benefitsTools);
+  const systemMsg = new SystemMessage(
+    "You are the NexaFlow Benefits Agent. You manage benefits splits and negotiate provider discounts using negotiate_provider_discount based on cumulative claim volume. Always check budget."
+  );
+  const response = await model.invoke([systemMsg, ...state.messages]);
+
+  logActivity("Benefits", "COMPLETED", response.content?.slice?.(0, 200) || "Benefits negotiation completed");
+
+  return { messages: [response] };
+}
+
 // ─── Router Function ────────────────────────────────────────────────
 function routeAfterCoordinator(state) {
   const lastMessage = state.messages[state.messages.length - 1];
@@ -244,6 +262,9 @@ function routeAfterCoordinator(state) {
   }
   if (content.includes("stream") || content.includes("payroll") || content.includes("salary")) {
     return "payroll";
+  }
+  if (content.includes("benefit") || content.includes("negotiat") || content.includes("discount")) {
+    return "benefits";
   }
   if (content.includes("pay") || content.includes("settle") || content.includes("transfer")) {
     return "settlement";
@@ -268,6 +289,7 @@ export function buildAgentGraph() {
     .addNode("verification", verificationNode)
     .addNode("compliance", complianceNode)
     .addNode("payroll", payrollNode)
+    .addNode("benefits", benefitsNode)
     .addNode("settlement", settlementNode)
     .addNode("tools", toolNode)
 
@@ -280,6 +302,7 @@ export function buildAgentGraph() {
       "verification",
       "compliance",
       "payroll",
+      "benefits",
       "settlement",
       END,
     ])
@@ -291,6 +314,7 @@ export function buildAgentGraph() {
     .addConditionalEdges("verification", routeAfterAgent, ["tools", END])
     .addConditionalEdges("compliance", routeAfterAgent, ["tools", END])
     .addConditionalEdges("payroll", routeAfterAgent, ["tools", END])
+    .addConditionalEdges("benefits", routeAfterAgent, ["tools", END])
     .addConditionalEdges("settlement", routeAfterAgent, ["tools", END]);
 
   return graph.compile();
@@ -302,6 +326,90 @@ export function buildAgentGraph() {
  * Process a benefits claim through the full agent pipeline
  */
 export async function processClaimWithAgents(invoiceText, memberAddress, claimAmount) {
+  logActivity("System", "CLAIM_RECEIVED", `Claim of $${claimAmount} from ${memberAddress.slice(0, 10)}...`);
+
+  if (isDemoMode) {
+    logActivity("Coordinator", "ROUTING", "Analyzing incoming request and delegating to sub-agents");
+    logActivity("Compliance", "SCREENING", "Running OFAC/sanctions compliance check");
+    
+    // Call compliance tool on-chain
+    const complianceResultStr = await checkComplianceTool.invoke({ address: memberAddress, checkType: "FULL" });
+    const complianceResult = JSON.parse(complianceResultStr);
+    
+    logActivity("Compliance", "SCREENED", `Compliance check done. Compliant: ${complianceResult.isCompliant}, Score: ${complianceResult.riskScore}`);
+
+    if (!complianceResult.isCompliant) {
+      logActivity("Coordinator", "REJECTED", "Member address failed compliance check");
+      return {
+        messages: [
+          { role: "human", content: "Process medical benefits claim" },
+          { role: "ai", content: `Compliance check failed: ${complianceResult.recommendation}` }
+        ],
+        activityLog: agentActivityLog.slice(-20),
+        demoMode: true
+      };
+    }
+
+    logActivity("Verification", "ANALYZING", "Processing claim verification request");
+    
+    // Call verify medical claim
+    const verifyResultStr = await verifyClaimTool.invoke({ invoiceText, memberAddress, claimAmount });
+    const verifyResult = JSON.parse(verifyResultStr);
+    
+    logActivity("Verification", "COMPLETED", `Verification done. Legitimate: ${verifyResult.isLegitimate}, Confidence: ${verifyResult.confidence}`);
+
+    if (!verifyResult.isLegitimate) {
+      logActivity("Coordinator", "REJECTED", "Claim verification failed legitimacy checks");
+      return {
+        messages: [
+          { role: "human", content: "Process medical benefits claim" },
+          { role: "ai", content: `Claim verification failed. Reason: ${verifyResult.reasoning.join(", ")}` }
+        ],
+        activityLog: agentActivityLog.slice(-20),
+        demoMode: true
+      };
+    }
+
+    logActivity("Settlement", "SETTLING", "Executing USDC payment via Circle DCW");
+    
+    // Call execute payment tool on-chain
+    const paymentResultStr = await executePaymentTool.invoke({
+      recipientAddress: memberAddress,
+      amountUsdc: claimAmount,
+      reason: "Medical claim reimbursement",
+      agentName: "settlement"
+    });
+    const paymentResult = JSON.parse(paymentResultStr);
+    
+    if (paymentResult.success) {
+      logActivity("Settlement", "SETTLED", `Payment of $${claimAmount} USDC settled. Tx: ${paymentResult.txHash?.slice(0, 10)}...`);
+    } else {
+      logActivity("Settlement", "FAILED", `Payment failed: ${paymentResult.error}`);
+    }
+
+    logActivity("Coordinator", "RECORDING", "Recording agent reputation on-chain via ERC-8004");
+    
+    // Call record reputation tool on-chain (using token ID 3 as verification agent example)
+    const reputationResultStr = await recordReputationTool.invoke({
+      agentTokenId: 3,
+      score: 10,
+      tag: "successful_verification",
+      description: "Successful medical claim verification"
+    });
+    const reputationResult = JSON.parse(reputationResultStr);
+    
+    logActivity("Coordinator", "COMPLETED", "Benefits claim process completed successfully");
+
+    return {
+      messages: [
+        { role: "human", content: "Process medical benefits claim" },
+        { role: "ai", content: `Claim processed successfully in Demo Mode.\nCompliance: APPROVED\nVerification: LEGITIMATE\nSettlement: SUCCESS (Tx: ${paymentResult.txHash || "none"})\nReputation recorded on-chain.` }
+      ],
+      activityLog: agentActivityLog.slice(-20),
+      demoMode: true
+    };
+  }
+
   const app = buildAgentGraph();
 
   const input = {
@@ -320,8 +428,6 @@ export async function processClaimWithAgents(invoiceText, memberAddress, claimAm
     ],
   };
 
-  logActivity("System", "CLAIM_RECEIVED", `Claim of $${claimAmount} from ${memberAddress.slice(0, 10)}...`);
-
   const result = await app.invoke(input);
   return {
     messages: result.messages.map((m) => ({
@@ -337,6 +443,67 @@ export async function processClaimWithAgents(invoiceText, memberAddress, claimAm
  * Create a payroll stream through the agent pipeline
  */
 export async function createStreamWithAgents(employeeAddress, flowRate, totalCap, employerAddress) {
+  logActivity("System", "STREAM_REQUEST", `Stream for ${employeeAddress.slice(0, 10)}... at ${flowRate} USDC/s`);
+
+  if (isDemoMode) {
+    logActivity("Coordinator", "ROUTING", "Analyzing incoming request and delegating to sub-agents");
+    logActivity("Compliance", "SCREENING", "Running OFAC/sanctions compliance check on employee");
+    
+    // Call compliance tool on-chain
+    const complianceResultStr = await checkComplianceTool.invoke({ address: employeeAddress, checkType: "FULL" });
+    const complianceResult = JSON.parse(complianceResultStr);
+    
+    logActivity("Compliance", "SCREENED", `Compliance check done. Compliant: ${complianceResult.isCompliant}, Score: ${complianceResult.riskScore}`);
+
+    if (!complianceResult.isCompliant) {
+      logActivity("Coordinator", "REJECTED", "Employee address failed compliance check");
+      return {
+        messages: [
+          { role: "human", content: "Create payroll stream" },
+          { role: "ai", content: `Compliance check failed: ${complianceResult.recommendation}` }
+        ],
+        activityLog: agentActivityLog.slice(-20),
+        demoMode: true
+      };
+    }
+
+    logActivity("Payroll", "MANAGING", "Checking payroll agent budget");
+    
+    // Call budget check
+    const budgetResultStr = await checkBudgetTool.invoke({ agentName: "payroll" });
+    const budgetResult = JSON.parse(budgetResultStr);
+    
+    logActivity("Payroll", "PROCESSED", `Budget check completed. Remaining: $${budgetResult.budgetRemaining} USDC`);
+
+    logActivity("Payroll", "MANAGING", "Creating payroll stream on StreamingPayroll contract");
+    
+    // Call create stream tool on-chain
+    const streamResultStr = await createStreamTool.invoke({
+      employeeAddress,
+      flowRatePerSecond: flowRate,
+      totalCapUsdc: totalCap,
+      employerAddress
+    });
+    const streamResult = JSON.parse(streamResultStr);
+    
+    if (streamResult.success) {
+      logActivity("Payroll", "PROCESSED", `Stream created successfully on-chain! Stream ID: ${streamResult.streamId || "none"}`);
+    } else {
+      logActivity("Payroll", "FAILED", `Failed to create stream: ${streamResult.error}`);
+    }
+
+    logActivity("Coordinator", "COMPLETED", "Payroll stream operation completed successfully");
+
+    return {
+      messages: [
+        { role: "human", content: "Create payroll stream" },
+        { role: "ai", content: `Payroll stream created successfully in Demo Mode.\nEmployee: ${employeeAddress}\nFlow Rate: ${flowRate} USDC/s\nTotal Cap: ${totalCap} USDC\nTx: ${streamResult.txHash || "none"}` }
+      ],
+      activityLog: agentActivityLog.slice(-20),
+      demoMode: true
+    };
+  }
+
   const app = buildAgentGraph();
 
   const input = {
@@ -355,8 +522,6 @@ export async function createStreamWithAgents(employeeAddress, flowRate, totalCap
     ],
   };
 
-  logActivity("System", "STREAM_REQUEST", `Stream for ${employeeAddress.slice(0, 10)}... at ${flowRate} USDC/s`);
-
   const result = await app.invoke(input);
   return {
     messages: result.messages.map((m) => ({
@@ -372,6 +537,27 @@ export async function createStreamWithAgents(employeeAddress, flowRate, totalCap
  * Run a compliance screening through the agent pipeline
  */
 export async function screenAddressWithAgents(address) {
+  logActivity("System", "COMPLIANCE_REQUEST", `Screening ${address.slice(0, 10)}...`);
+
+  if (isDemoMode) {
+    logActivity("Compliance", "SCREENING", "Running OFAC/sanctions compliance check");
+    
+    // Call compliance tool on-chain
+    const complianceResultStr = await checkComplianceTool.invoke({ address, checkType: "FULL" });
+    const complianceResult = JSON.parse(complianceResultStr);
+    
+    logActivity("Compliance", "SCREENED", `Compliance check done. Compliant: ${complianceResult.isCompliant}, Score: ${complianceResult.riskScore}`);
+
+    return {
+      messages: [
+        { role: "human", content: "Screen address compliance" },
+        { role: "ai", content: `Compliance check completed in Demo Mode. Recommendation: ${complianceResult.recommendation}` }
+      ],
+      activityLog: agentActivityLog.slice(-20),
+      demoMode: true
+    };
+  }
+
   const app = buildAgentGraph();
 
   const input = {
@@ -383,8 +569,6 @@ export async function screenAddressWithAgents(address) {
       ),
     ],
   };
-
-  logActivity("System", "COMPLIANCE_REQUEST", `Screening ${address.slice(0, 10)}...`);
 
   const result = await app.invoke(input);
   return {

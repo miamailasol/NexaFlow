@@ -6,23 +6,51 @@
  * 
  * Flow:
  * 1. Client requests a paid resource
- * 2. Server responds with 402 + PAYMENT-REQUIRED header
+ * 2. Server responds with 402 + PAYMENT-REQUIRED header (base64 encoded JSON)
  * 3. Client signs an EIP-3009 authorization (offchain, zero gas)
- * 4. Client retries with PAYMENT-SIGNATURE header
- * 5. Server verifies and serves the resource
- * 6. Circle Gateway settles in batches (nanopayments)
+ * 4. Client retries with PAYMENT-SIGNATURE header (base64 encoded JSON)
+ * 5. Server verifies and settles via Circle Gateway
+ * 6. Resource is served
  * 
  * @see https://developers.circle.com/gateway/nanopayments/concepts/x402
  */
 
 import { keccak256, toHex } from "viem";
+import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 
-// ─── Nanopayment Ledger (in-memory for demo, Gateway in production) ──
+// ─── Circle Nanopayments Client ──────────────────────────────────────
+const facilitator = new BatchFacilitatorClient();
+
+// ─── Nanopayment Ledger (in-memory cache for dashboard visualization) ──
 const paymentLedger = [];
-const balances = new Map(); // buyerAddress => remaining USDC balance
+const balances = new Map(); // Keep as fallback/cache
+
+const ARC_TESTNET_NETWORK = "eip155:5042002";
+const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
+const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
 
 /**
- * Initialize a buyer's nanopayment balance (in-memory ledger; production uses Circle Gateway Wallet)
+ * Build payment requirements for Circle Gateway
+ */
+function buildPaymentRequirements(priceUsdc, sellerAddress) {
+  const amountAtomic = Math.round(priceUsdc * 1_000_000);
+  return {
+    scheme: "exact",
+    network: ARC_TESTNET_NETWORK,
+    asset: ARC_TESTNET_USDC,
+    amount: amountAtomic.toString(),
+    payTo: sellerAddress,
+    maxTimeoutSeconds: 345600,
+    extra: {
+      name: "GatewayWalletBatched",
+      version: "1",
+      verifyingContract: ARC_TESTNET_GATEWAY_WALLET,
+    },
+  };
+}
+
+/**
+ * Record a deposit event in the in-memory ledger
  */
 export function depositNanopaymentBalance(buyerAddress, amountUsdc) {
   const current = balances.get(buyerAddress.toLowerCase()) || 0;
@@ -46,10 +74,34 @@ export function getNanopaymentLedger() {
 }
 
 /**
- * Get a buyer's remaining nanopayment balance
+ * Get a buyer's remaining nanopayment balance from Circle Gateway API
  */
-export function getNanopaymentBalance(buyerAddress) {
-  return balances.get(buyerAddress.toLowerCase()) || 0;
+export async function getNanopaymentBalance(buyerAddress) {
+  try {
+    const response = await fetch("https://gateway-api-testnet.circle.com/v1/balances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: "USDC",
+        sources: [{ domain: 26, depositor: buyerAddress }],
+      }),
+    });
+    if (!response.ok) {
+      // Fallback to in-memory balance if API fails
+      return balances.get(buyerAddress.toLowerCase()) || 0;
+    }
+    const data = await response.json();
+    const bal = data.balances?.find(b => b.domain === 26);
+    const raw = bal?.balance ?? "0";
+    const balance = raw.includes(".") ? parseFloat(raw) : parseFloat(raw) / 1000000;
+    
+    // Sync cache
+    balances.set(buyerAddress.toLowerCase(), balance);
+    return balance;
+  } catch (err) {
+    console.error("Failed to fetch gateway balance for address:", buyerAddress, err);
+    return balances.get(buyerAddress.toLowerCase()) || 0;
+  }
 }
 
 /**
@@ -92,95 +144,114 @@ export function x402PaymentRequired({
   sellerAddress = "0xCA2DE969C3266f530a27bE3B46EC0550cF609c67",
   network = "arc-testnet",
 } = {}) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Check for PAYMENT-SIGNATURE header
     const paymentSignature = req.headers["payment-signature"] || req.headers["x-payment-signature"];
 
     if (!paymentSignature) {
-      // No payment provided — return 402 Payment Required
-      const paymentDetails = {
-        scheme: "exact",
-        network,
-        currency: "USDC",
-        amount: priceUsdc.toString(),
-        destination: sellerAddress,
-        description: resourceDescription,
-        protocol: "x402",
-        facilitator: "circle-gateway",
-        expiresAt: new Date(Date.now() + 300000).toISOString(), // 5 min expiry
+      // No payment provided — return 402 Payment Required with base64 encoded requirements
+      const requirements = buildPaymentRequirements(priceUsdc, sellerAddress);
+      
+      const paymentRequired = {
+        x402Version: 2,
+        resource: {
+          url: req.originalUrl || req.url,
+          description: `${resourceDescription} (${priceUsdc} USDC)`,
+          mimeType: "application/json",
+        },
+        accepts: [requirements],
       };
 
-      res.setHeader("PAYMENT-REQUIRED", JSON.stringify(paymentDetails));
+      const paymentRequiredB64 = Buffer.from(JSON.stringify(paymentRequired)).toString("base64");
+
+      res.setHeader("PAYMENT-REQUIRED", paymentRequiredB64);
       res.setHeader("Content-Type", "application/json");
 
       return res.status(402).json({
         error: "Payment Required",
-        message: `This resource costs ${priceUsdc} USDC. Include a PAYMENT-SIGNATURE header with your signed payment authorization.`,
-        paymentDetails,
+        message: `This resource costs ${priceUsdc} USDC. Include a base64 encoded PAYMENT-SIGNATURE header.`,
         protocol: "x402",
-        documentation: "https://docs.x402.org",
+        paymentRequiredB64,
       });
     }
 
-    // Verify payment signature
+    // Verify and settle payment via Circle Gateway
     try {
-      const payment = JSON.parse(paymentSignature);
-      const buyerAddress = (payment.buyer || payment.from || "").toLowerCase();
-
-      if (!buyerAddress) {
-        return res.status(400).json({
-          error: "Invalid Payment",
-          message: "PAYMENT-SIGNATURE must include a 'buyer' or 'from' address",
-        });
+      let paymentPayload;
+      try {
+        paymentPayload = JSON.parse(
+          Buffer.from(paymentSignature, "base64").toString("utf-8")
+        );
+      } catch (err) {
+        // Fallback for direct JSON strings
+        paymentPayload = JSON.parse(paymentSignature);
       }
 
-      // Check buyer balance (in production, Gateway handles this)
-      const balance = balances.get(buyerAddress) || 0;
+      const requirements = buildPaymentRequirements(priceUsdc, sellerAddress);
 
-      if (balance < priceUsdc) {
+      // 1. Verify payment signature and message parameters
+      const verifyResult = await facilitator.verify(
+        paymentPayload,
+        requirements
+      );
+
+      if (!verifyResult.isValid) {
         return res.status(402).json({
-          error: "Insufficient Balance",
-          message: `Buyer balance: ${balance} USDC, required: ${priceUsdc} USDC. Deposit more USDC to your Gateway Wallet.`,
-          balance,
-          required: priceUsdc,
+          error: "Payment verification failed",
+          reason: verifyResult.invalidReason || "Invalid signature or requirements mismatch",
         });
       }
 
-      // Deduct payment
-      balances.set(buyerAddress, balance - priceUsdc);
+      // 2. Settle the payment via Circle Gateway
+      const settleResult = await facilitator.settle(
+        paymentPayload,
+        requirements
+      );
 
-      // Record in ledger
+      if (!settleResult.success) {
+        console.error(`[x402] Settlement failed: ${settleResult.errorReason}`);
+        return res.status(402).json({
+          error: "Payment settlement failed",
+          reason: settleResult.errorReason || "Failed to settle payment on Gateway",
+        });
+      }
+
+      const payer = settleResult.payer || verifyResult.payer || paymentPayload.buyer || "unknown";
+
+      // 3. Record in local memory ledger for dashboard real-time statistics
       const paymentRecord = {
         type: "PAYMENT",
-        buyer: buyerAddress,
+        buyer: payer,
         seller: sellerAddress,
         amount: priceUsdc,
         resource: resourceDescription,
-        signature: payment.signature || keccak256(toHex(`${buyerAddress}-${Date.now()}`)),
+        signature: settleResult.transaction || paymentPayload.signature || keccak256(toHex(`${payer}-${Date.now()}`)),
         timestamp: new Date().toISOString(),
-        settled: false, // Will be settled in batch by Gateway
+        settled: true,
       };
       paymentLedger.push(paymentRecord);
 
       // Attach payment info to request
       req.x402Payment = paymentRecord;
 
-      // Set PAYMENT-RESPONSE header
-      res.setHeader(
-        "PAYMENT-RESPONSE",
+      // 4. Set PAYMENT-RESPONSE header
+      const responseHeader = Buffer.from(
         JSON.stringify({
-          status: "verified",
-          txId: paymentRecord.signature,
-          amount: priceUsdc,
-          message: "Payment verified. Resource access granted.",
+          success: true,
+          transaction: settleResult.transaction,
+          network: requirements.network,
+          payer,
         })
-      );
+      ).toString("base64");
+
+      res.setHeader("PAYMENT-RESPONSE", responseHeader);
 
       next();
     } catch (error) {
+      console.error("[x402] Payment processing error:", error);
       return res.status(400).json({
         error: "Invalid Payment Signature",
-        message: "Could not parse PAYMENT-SIGNATURE header",
+        message: "Could not parse or verify PAYMENT-SIGNATURE header",
         details: error.message,
       });
     }

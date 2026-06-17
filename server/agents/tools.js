@@ -673,4 +673,37 @@ export const createJobTool = tool(
   }
 );
 
+// ─── TOOL 9: Negotiate Provider Discount ────────────────────────────
+export const negotiateDiscountTool = tool(
+  async ({ providerAddress, claimVolumeUsdc }) => {
+    try {
+      const discountPercentage = claimVolumeUsdc > 100 ? 10 : 5;
+      const originalFee = 0.02; // 2% standard co-op fee
+      const negotiatedFee = originalFee * (1 - discountPercentage / 100);
+
+      console.log(`🤖 Agentic Negotiation: Provider ${providerAddress} agreed to a ${discountPercentage}% discount. New fee: ${(negotiatedFee * 100).toFixed(2)}%`);
+
+      return JSON.stringify({
+        success: true,
+        providerAddress,
+        claimVolumeUsdc,
+        discountPercentage,
+        originalFeeBasisPoints: 200,
+        negotiatedFeeBasisPoints: Math.round(negotiatedFee * 10000),
+        reason: `Volume of $${claimVolumeUsdc} USDC qualifies for the tiered co-op fee reduction.`
+      });
+    } catch (error) {
+      return JSON.stringify({ success: false, error: error.message });
+    }
+  },
+  {
+    name: "negotiate_provider_discount",
+    description: "Negotiates a co-op or service fee discount with a healthcare provider or service contract based on cumulative transaction volume. Returns the adjusted basis points fee.",
+    schema: z.object({
+      providerAddress: z.string().describe("The wallet address of the service provider / clinic"),
+      claimVolumeUsdc: z.number().describe("The total cumulative USDC volume submitted to this provider"),
+    }),
+  }
+);
+
 export { CONTRACTS, publicClient, ARC_TESTNET };
