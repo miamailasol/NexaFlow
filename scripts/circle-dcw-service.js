@@ -246,6 +246,62 @@ app.post('/api/payroll/start-stream', async (req, res) => {
   }
 });
 
+// POST /api/treasury/transfer-dcw
+app.post('/api/treasury/transfer-dcw', async (req, res) => {
+  try {
+    const { recipient, amount } = req.body;
+    if (!recipient || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing parameters: recipient and amount are required',
+      });
+    }
+
+    if (!store.walletId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Developer-Controlled Wallet has not been created yet',
+      });
+    }
+
+    const amountRaw = Math.round(parseFloat(amount) * 1e6); // 6 decimals for USDC
+
+    if (isLiveMode && circleClient) {
+      console.log(`Executing USDC transfer of ${amount} to ${recipient} via Circle DCW...`);
+      const txResponse = await circleClient.createContractExecutionTransaction({
+        walletId: store.walletId,
+        contractAddress: '0x3600000000000000000000000000000000000000', // USDC address on Arc
+        abiFunctionSignature: 'transfer(address,uint256)',
+        abiParameters: [recipient, amountRaw.toString()],
+        feeLevel: 'MEDIUM',
+      });
+
+      const txId = txResponse.data?.id;
+      const txHash = txResponse.data?.txHash;
+
+      return res.json({
+        success: true,
+        message: 'USDC transfer transaction broadcasted via Circle DCW',
+        txId,
+        txHash,
+      });
+    } else {
+      // Mock/Demo Mode
+      console.log('Simulating USDC transfer in demo mode...');
+      const mockHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      return res.json({
+        success: true,
+        message: 'Mock transfer executed successfully via Circle DCW (Demo Mode)',
+        txId: 'mock-tx-transfer-id-2233',
+        txHash: mockHash,
+      });
+    }
+  } catch (err) {
+    console.error('Error executing transfer transaction:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`NexaFlow Treasury DCW backend service running at http://localhost:${PORT}`);
 });
