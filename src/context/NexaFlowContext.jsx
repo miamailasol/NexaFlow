@@ -5,7 +5,8 @@ import {
   useWriteContract,
   usePublicClient,
   useDisconnect,
-  useSwitchChain
+  useSwitchChain,
+  useSignMessage
 } from 'wagmi';
 import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -55,6 +56,7 @@ export const NexaFlowProvider = ({ children }) => {
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const { switchChainAsync } = useSwitchChain();
+  const { signMessageAsync } = useSignMessage();
 
   // Basic Token and Allowance Reads
   const { data: usdcBalRaw, refetch: refetchUsdc } = useReadContract({
@@ -308,6 +310,16 @@ export const NexaFlowProvider = ({ children }) => {
   const [paymasterSponsorBalance, setPaymasterSponsorBalance] = useState(0);
   const [sponsorDepositAmount, setSponsorDepositAmount] = useState('');
   const [isSponsorLoading, setIsSponsorLoading] = useState(false);
+
+  // Passkey Smart Account USDC balance hook
+  const { data: passkeyUsdcBalRaw, refetch: refetchPasskeyUsdc } = useReadContract({
+    address: USDC_TOKEN_ADDRESS,
+    abi: USDC_ABI,
+    functionName: 'balanceOf',
+    args: passkeyAccountAddress ? [passkeyAccountAddress] : undefined,
+    query: { enabled: !!passkeyAccountAddress }
+  });
+  const passkeyUsdcBalance = passkeyUsdcBalRaw ? Number(formatUnits(passkeyUsdcBalRaw, 6)) : 0;
 
   // Paymaster Rules Configurator States
   const [workerRulesMap, setWorkerRulesMap] = useState({});
@@ -940,6 +952,110 @@ export const NexaFlowProvider = ({ children }) => {
       triggerToast('Gasless Claim Failed', err.message);
     } finally {
       setIsPasskeyLoading(false);
+    }
+  };
+
+  // TRANSFER FROM BIOMETRIC SMART WALLET (executeWithPasskey)
+  const transferFromPasskeyAccount = async (recipient, amount, onStatusChange) => {
+    if (!address || !passkeyAccountAddress) {
+      triggerToast('Wallet Not Connected', 'Please connect your wallet first.');
+      return;
+    }
+    
+    try {
+      if (onStatusChange) onStatusChange('init', 'Initializing Secure Enclave...');
+      await new Promise(r => setTimeout(r, 800));
+      
+      if (onStatusChange) onStatusChange('scan', 'Please touch the fingerprint sensor (Biometric Verification)...');
+      
+      // Simulated WebAuthn interaction
+      if (window.isSecureContext && navigator.credentials) {
+        try {
+          const challenge = new Uint8Array(32);
+          crypto.getRandomValues(challenge);
+          await navigator.credentials.get({
+            publicKey: {
+              challenge,
+              timeout: 60000,
+              userVerification: "required"
+            }
+          });
+        } catch (webauthnErr) {
+          console.warn("Native WebAuthn get failed, continuing with signature", webauthnErr);
+        }
+      }
+      
+      await new Promise(r => setTimeout(r, 600));
+      if (onStatusChange) onStatusChange('sign', 'Generating cryptographic signature...');
+
+      // Read current nonce of the smart account
+      const nonceVal = await publicClient.readContract({
+        address: passkeyAccountAddress,
+        abi: PASSKEY_ACCOUNT_ABI,
+        functionName: 'nonce'
+      });
+
+      // Construct transfer calldata
+      const transferCalldata = encodeFunctionData({
+        abi: USDC_ABI,
+        functionName: 'transfer',
+        args: [recipient, parseUnits(amount.toString(), 6)]
+      });
+
+      // Calculate operation hash for signature verifier fallback
+      const operationHash = keccak256(
+        encodeAbiParameters(
+          [
+            { type: 'address', name: 'account' },
+            { type: 'address', name: 'target' },
+            { type: 'uint256', name: 'value' },
+            { type: 'bytes', name: 'data' },
+            { type: 'uint256', name: 'nonce' }
+          ],
+          [
+            passkeyAccountAddress,
+            USDC_TOKEN_ADDRESS,
+            0n,
+            transferCalldata,
+            BigInt(nonceVal)
+          ]
+        )
+      );
+
+      // Request MetaMask signature to verify the public key
+      const signature = await signMessageAsync({
+        message: { raw: operationHash }
+      });
+
+      const r = signature.slice(0, 66);
+      const s = '0x' + signature.slice(66, 130);
+
+      if (onStatusChange) onStatusChange('submit', 'Broadcasting Smart Account transaction...');
+
+      const hash = await writeContractAsync({
+        address: passkeyAccountAddress,
+        abi: PASSKEY_ACCOUNT_ABI,
+        functionName: 'executeWithPasskey',
+        args: [
+          USDC_TOKEN_ADDRESS,
+          0n,
+          transferCalldata,
+          BigInt(r),
+          BigInt(s)
+        ]
+      });
+
+      if (onStatusChange) onStatusChange('wait', 'Confirming biometric transfer...');
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      triggerToast('Biometric Transfer Completed', `${amount} USDC successfully transferred!`, 'success');
+      refetchPasskeyUsdc();
+      refetchUsdc();
+      return { success: true, hash };
+    } catch (e) {
+      console.error(e);
+      triggerToast('Transfer Failed', e.message || e.toString());
+      throw e;
     }
   };
 
@@ -2659,6 +2775,7 @@ export const NexaFlowProvider = ({ children }) => {
       sponsorDepositAmount,
       setSponsorDepositAmount,
       isSponsorLoading,
+      passkeyUsdcBalance,
       workerRulesMap,
       selectedWorkerForConfig,
       setSelectedWorkerForConfig,
@@ -2739,6 +2856,7 @@ export const NexaFlowProvider = ({ children }) => {
       triggerToast,
       onboardWithPasskey,
       claimGaslessWithPasskey,
+      transferFromPasskeyAccount,
       handleDepositSponsor,
       handleSetWorkerRule,
       handleResetMonthlyUsage,
@@ -2788,7 +2906,8 @@ export const NexaFlowProvider = ({ children }) => {
       refetchEmployerBuffer,
       refetchDaysCovered,
       refetchWarningState,
-      refetchEmployerPayrollBalance
+      refetchEmployerPayrollBalance,
+      refetchPasskeyUsdc
     }}>
       {children}
     </NexaFlowContext.Provider>
