@@ -32,13 +32,13 @@ const AGENT_SERVER_URL = 'http://localhost:3012';
 
 // Agent identity colors and icons
 const AGENT_CONFIG = {
-  Coordinator: { color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)', icon: Brain },
-  Payroll: { color: '#00f2fe', gradient: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)', icon: DollarSign },
-  Verification: { color: '#34d399', gradient: 'linear-gradient(135deg, #34d399 0%, #059669 100%)', icon: CheckCircle },
-  Compliance: { color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', icon: Shield },
-  Settlement: { color: '#f472b6', gradient: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)', icon: Send },
-  Benefits: { color: '#60a5fa', gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)', icon: TrendingUp },
-  System: { color: '#6b7280', gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)', icon: Server },
+  Coordinator: { color: '#7c3aed', gradient: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)', icon: Brain },
+  Payroll: { color: '#0891b2', gradient: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)', icon: DollarSign },
+  Verification: { color: '#059669', gradient: 'linear-gradient(135deg, #34d399 0%, #059669 100%)', icon: CheckCircle },
+  Compliance: { color: '#d97706', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', icon: Shield },
+  Settlement: { color: '#ec4899', gradient: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)', icon: Send },
+  Benefits: { color: '#2563eb', gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)', icon: TrendingUp },
+  System: { color: '#4b5563', gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)', icon: Server },
 };
 
 function AgentCommandCenter() {
@@ -169,31 +169,38 @@ function AgentCommandCenter() {
 
       {/* Server Status Banner */}
       <div style={{
-        background: serverStatus ? 'rgba(52, 211, 153, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-        border: `1.5px solid ${serverStatus ? 'rgba(52, 211, 153, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
-        borderRadius: '10px',
+        backgroundColor: '#FFFFFF',
+        border: 'var(--medium-border)',
+        borderRadius: '12px',
         padding: '14px 20px',
         marginBottom: '24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        boxShadow: 'var(--shadow-flat-sm)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '10px', height: '10px', borderRadius: '50%',
-            backgroundColor: serverStatus ? '#34d399' : '#ef4444',
-            boxShadow: serverStatus ? '0 0 8px rgba(52, 211, 153, 0.6)' : '0 0 8px rgba(239, 68, 68, 0.6)',
+            width: '12px', height: '12px', borderRadius: '50%',
+            backgroundColor: serverStatus ? 'var(--color-success)' : 'var(--color-error)',
+            border: 'var(--thin-border)',
+            boxShadow: '1.5px 1.5px 0px #1A1A1A',
           }} />
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>
+          <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
             {serverStatus ? 'Agent Server Online' : 'Agent Server Offline'}
           </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
             {serverStatus ? `v${serverStatus.version} · Port ${AGENT_SERVER_URL.split(':').pop()}` : 'Run: npm run server'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-main)' }}>
           {serverStatus?.circle?.features?.slice(0, 3).map((f, i) => (
-            <span key={i} className="badge" style={{ background: 'rgba(167, 139, 250, 0.15)', color: '#a78bfa', border: '1px solid rgba(167, 139, 250, 0.25)' }}>
+            <span key={i} className="badge" style={{
+              backgroundColor: 'var(--color-primary)',
+              color: 'var(--text-main)',
+              border: 'var(--thin-border)',
+              boxShadow: '1.5px 1.5px 0px #1A1A1A',
+            }}>
               ✓ {f}
             </span>
           ))}
@@ -211,31 +218,33 @@ function AgentCommandCenter() {
 
           return (
             <div key={agentName} style={{
-              background: 'rgba(26,26,26,0.02)',
-              border: '1.5px solid rgba(26,26,26,0.08)',
+              backgroundColor: '#FFFFFF',
+              border: 'var(--medium-border)',
               borderRadius: '12px',
               padding: '16px',
               position: 'relative',
               overflow: 'hidden',
+              boxShadow: 'var(--shadow-flat-sm)',
             }}>
               <div style={{
                 position: 'absolute', top: '-8px', right: '-8px', width: '50px', height: '50px',
-                background: config.gradient, opacity: 0.08, borderRadius: '50%',
+                background: config.gradient, opacity: 0.12, borderRadius: '50%',
               }} />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '8px',
                   background: config.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: 'var(--thin-border)',
                 }}>
                   <IconComp size={14} color="#fff" />
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '700', color: config.color, textTransform: 'capitalize' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: config.color, textTransform: 'capitalize' }}>
                   {agentName}
                 </span>
               </div>
 
-              <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>
+              <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '4px' }}>
                 ${remaining.toLocaleString()}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
@@ -244,16 +253,16 @@ function AgentCommandCenter() {
 
               {/* Progress bar */}
               <div style={{
-                height: '4px', borderRadius: '2px', background: 'rgba(26,26,26,0.08)',
+                height: '6px', borderRadius: '3px', background: '#EEEEEE', border: '1px solid var(--text-main)'
               }}>
                 <div style={{
-                  height: '100%', borderRadius: '2px',
+                  height: '100%',
                   width: `${Math.min(utilPct, 100)}%`,
                   background: config.gradient,
                   transition: 'width 0.5s ease',
                 }} />
               </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right', fontWeight: '600' }}>
                 {utilPct.toFixed(1)}% used · {budget.transactions?.length || 0} txs
               </div>
             </div>
@@ -288,27 +297,29 @@ function AgentCommandCenter() {
                 return (
                   <div key={entry.id} style={{
                     display: 'flex', gap: '10px', padding: '10px 12px',
-                    background: 'rgba(26,26,26,0.02)',
-                    border: '1px solid rgba(26,26,26,0.08)',
+                    backgroundColor: '#FFFFFF',
+                    border: 'var(--thin-border)',
                     borderRadius: '8px',
-                    borderLeft: `3px solid ${config.color}`,
+                    borderLeft: `5px solid ${config.color}`,
+                    boxShadow: '1.5px 1.5px 0px #1A1A1A',
                   }}>
                     <div style={{
                       width: '24px', height: '24px', borderRadius: '6px',
                       background: config.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      border: '1px solid var(--text-main)',
                     }}>
                       <IconComp size={12} color="#fff" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '700', color: config.color }}>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: config.color }}>
                           {entry.agent}
                         </span>
                         <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                           {new Date(entry.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
-                      <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-main)', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '2px' }}>
                         {entry.action}
                       </div>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -340,15 +351,16 @@ function AgentCommandCenter() {
                 { label: 'Avg Payment', value: `$${(nanopaymentStats?.averagePaymentUsdc || 0).toFixed(6)}`, color: '#f472b6' },
               ].map((stat, i) => (
                 <div key={i} style={{
-                  background: 'rgba(26,26,26,0.02)',
-                  border: '1px solid rgba(26,26,26,0.08)',
+                  backgroundColor: '#FFFFFF',
+                  border: 'var(--thin-border)',
                   borderRadius: '8px',
                   padding: '12px',
                   textAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  boxShadow: '1.5px 1.5px 0px #1A1A1A',
                 }}>
                   <div style={{ fontSize: '18px', fontWeight: '700', color: stat.color, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {(stat.label.includes('USDC') || stat.label.includes('Payment')) && (
@@ -377,12 +389,17 @@ function AgentCommandCenter() {
               ].map((ep, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px',
-                  background: 'rgba(26,26,26,0.02)', borderRadius: '6px', border: '1px solid rgba(26,26,26,0.08)',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '6px',
+                  border: 'var(--thin-border)',
+                  boxShadow: '1.5px 1.5px 0px #1A1A1A',
                 }}>
                   <span className="badge" style={{
-                    background: ep.method === 'POST' ? 'rgba(167, 139, 250, 0.15)' : 'rgba(0, 242, 254, 0.15)',
-                    color: ep.method === 'POST' ? '#a78bfa' : '#00f2fe',
-                    fontSize: '9px', fontWeight: '700', padding: '2px 6px',
+                    backgroundColor: ep.method === 'POST' ? 'var(--color-primary)' : 'var(--color-secondary)',
+                    color: 'var(--text-main)',
+                    fontSize: '9px', fontWeight: '800', padding: '2px 6px',
+                    border: 'var(--thin-border)',
+                    boxShadow: '1px 1px 0px #1A1A1A',
                   }}>
                     {ep.method}
                   </span>
