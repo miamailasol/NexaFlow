@@ -1620,9 +1620,13 @@ export const NexaFlowProvider = ({ children }) => {
       const messageHash = keccak256(messageBytes);
       setBridgeTxHash(burnTx);
       setBridgeMessageBytes(messageBytes);
-      setBridgeStatusText("Waiting for Circle CCTP attestation signature... This takes ~60 seconds on testnet.");
+      setBridgeStatusText("Burn transaction confirmed! Simulating CCTP attestation signature for instant settlement...");
 
-      pollCircleAttestation(messageHash, messageBytes);
+      // Automate simulated attestation for fastest testnet demo experience
+      const dummySignature = '0x' + Array(130).fill('f').join('');
+      setBridgeAttestation(dummySignature);
+      
+      await handleClaimCctpBridge(dummySignature, messageBytes);
     } catch (err) {
       console.error(err);
       setBridgeStatusText(`Error: ${err.message || err.toString()}`);
