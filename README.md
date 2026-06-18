@@ -330,3 +330,4 @@ By building on **Arc Testnet** and leveraging **Circle's Programmable Wallets**,
 Contributions are welcome! Please read `CONTRIBUTING.md` before submitting a pull request.
 
 This project is licensed under the [MIT License](LICENSE).
+
