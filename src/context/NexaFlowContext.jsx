@@ -11,6 +11,7 @@ import {
 import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs, getAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ethers } from 'ethers';
+import { arcTestnet } from 'viem/chains';
 
 const getCountryCode = (loc) => {
   if (!loc) return 'US';
@@ -51,7 +52,7 @@ import {
 const NexaFlowContext = createContext(null);
 
 export const NexaFlowProvider = ({ children }) => {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { disconnect } = useDisconnect();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
@@ -423,7 +424,10 @@ export const NexaFlowProvider = ({ children }) => {
 
   // Fetch gasless sponsor balance
   const fetchSponsorBalance = async () => {
-    if (!address || !publicClient) return;
+    if (!address || !publicClient || chainId !== arcTestnet.id) {
+      setPaymasterSponsorBalance(0);
+      return;
+    }
     try {
       const bal = await publicClient.readContract({
         address: NEXA_PAYMASTER_ADDRESS,
@@ -434,12 +438,16 @@ export const NexaFlowProvider = ({ children }) => {
       setPaymasterSponsorBalance(Number(formatUnits(bal, 6)));
     } catch (e) {
       console.warn("Failed to fetch sponsor balance", e);
+      setPaymasterSponsorBalance(0);
     }
   };
 
   // Fetch gas rules for workers
   const fetchWorkerRules = async () => {
-    if (!publicClient) return;
+    if (!address || !publicClient || chainId !== arcTestnet.id) {
+      setWorkerRulesMap({});
+      return;
+    }
     try {
       const workers = await publicClient.readContract({
         address: PAYMASTER_RULES_MANAGER_ADDRESS,
@@ -465,6 +473,7 @@ export const NexaFlowProvider = ({ children }) => {
       setWorkerRulesMap(newRules);
     } catch (e) {
       console.warn("Failed to fetch worker rules", e);
+      setWorkerRulesMap({});
     }
   };
 
@@ -735,32 +744,39 @@ export const NexaFlowProvider = ({ children }) => {
 
   // Fetch proposals
   const fetchProposals = async () => {
-    if (!publicClient) return;
+    if (!address || !publicClient || chainId !== arcTestnet.id) {
+      setProposals([]);
+      return;
+    }
     try {
       const count = await publicClient.readContract({
-        address: COMPLIANCE_REGISTRY_ADDRESS,
-        abi: COMPLIANCE_REGISTRY_ABI,
-        functionName: 'proposalCount'
+        address: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'getProposalsCount'
       });
       const num = Number(count);
       const list = [];
       for (let i = 0; i < num; i++) {
         const prop = await publicClient.readContract({
-          address: COMPLIANCE_REGISTRY_ADDRESS,
-          abi: COMPLIANCE_REGISTRY_ABI,
+          address: STREAMING_PAYROLL_ADDRESS,
+          abi: STREAMING_PAYROLL_ABI,
           functionName: 'proposals',
           args: [BigInt(i)]
         });
         list.push({
           id: i,
-          target: prop[0],
-          data: prop[1],
-          executed: prop[2]
+          actionType: prop[0],
+          streamId: prop[1],
+          target: prop[2],
+          amount: prop[3],
+          executed: prop[4],
+          confirmationCount: prop[5]
         });
       }
       setProposals(list);
     } catch (e) {
       console.warn("Failed to fetch proposals", e);
+      setProposals([]);
     }
   };
 
