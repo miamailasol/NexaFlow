@@ -101,3 +101,73 @@ CREATE TRIGGER update_employees_modtime BEFORE UPDATE ON employees FOR EACH ROW 
 CREATE TRIGGER update_streams_modtime BEFORE UPDATE ON streams_audit FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_claims_modtime BEFORE UPDATE ON claims_audit FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_treasury_modtime BEFORE UPDATE ON treasury_status FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+-- Table 7: DAO Governance Suggestions
+CREATE TABLE IF NOT EXISTS suggestions (
+    id VARCHAR(255) PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'Planned',
+    impact VARCHAR(50) DEFAULT 'Medium',
+    upvotes INTEGER DEFAULT 0,
+    downvotes INTEGER DEFAULT 0,
+    submitter_address VARCHAR(42) NOT NULL,
+    submitter_name VARCHAR(255) DEFAULT 'Anonymous',
+    date VARCHAR(50) DEFAULT 'Just now',
+    voted_users JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 8: DAO Governance Comments
+CREATE TABLE IF NOT EXISTS comments (
+    id VARCHAR(255) PRIMARY KEY,
+    suggestion_id VARCHAR(255) NOT NULL REFERENCES suggestions(id) ON DELETE CASCADE,
+    author_name VARCHAR(255),
+    author_address VARCHAR(42),
+    content TEXT NOT NULL,
+    timestamp VARCHAR(50) DEFAULT 'Just now',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 9: Contributor Profiles
+CREATE TABLE IF NOT EXISTS profiles (
+    address VARCHAR(42) PRIMARY KEY,
+    name VARCHAR(255),
+    bio TEXT,
+    reputation INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 10: Agent Logs
+CREATE TABLE IF NOT EXISTS agent_logs (
+    id SERIAL PRIMARY KEY,
+    agent VARCHAR(255) NOT NULL,
+    action VARCHAR(255) NOT NULL,
+    details TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 11: x402 Ledger
+CREATE TABLE IF NOT EXISTS x402_ledger (
+    payment_id VARCHAR(255) PRIMARY KEY,
+    sender VARCHAR(42) NOT NULL,
+    recipient VARCHAR(42) NOT NULL,
+    amount NUMERIC(20, 6) NOT NULL,
+    nonce VARCHAR(255) NOT NULL,
+    signature TEXT NOT NULL,
+    tx_hash VARCHAR(66),
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 12: x402 Balances
+CREATE TABLE IF NOT EXISTS x402_balances (
+    address VARCHAR(42) PRIMARY KEY,
+    balance NUMERIC(20, 6) DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Triggers for profiles and x402_balances
+CREATE TRIGGER update_profiles_modtime BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_x402_balances_modtime BEFORE UPDATE ON x402_balances FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
