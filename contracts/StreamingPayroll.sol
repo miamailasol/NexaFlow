@@ -411,67 +411,7 @@ contract StreamingPayroll {
             }
         }
 
-        uint256 coopFee = _routeCoopFee(claimable);
-
-        // Calculate tax withholding split
-        string memory country = streamCountries[streamId];
-        uint256 taxRate = taxRates[country];
-        address taxAuthority = taxAuthorities[country];
-
-        // Calculate referral split
-        address referrer = referrers[stream.employee];
-        uint256 referralBonus = 0;
-        if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
-            referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
-        }
-
-        uint256 taxAmount = 0;
-        uint256 employeeAmount = claimable - coopFee - referralBonus;
-
-        if (taxRate > 0 && taxAuthority != address(0)) {
-            taxAmount = (claimable * taxRate) / 10000;
-            employeeAmount = claimable - taxAmount - coopFee - referralBonus;
-        }
-
-        if (taxAmount > 0) {
-            require(
-                IERC20(usdcToken).transfer(taxAuthority, taxAmount),
-                "USDC tax transfer failed"
-            );
-        }
-
-        if (referralBonus > 0) {
-            require(
-                IERC20(usdcToken).transfer(referrer, referralBonus),
-                "USDC referral transfer failed"
-            );
-        }
-
-        address targetToken = targetPayoutTokens[streamId];
-        if (targetToken != address(0) && targetToken != usdcToken) {
-            require(swapRouter != address(0), "Swap router not set");
-            require(
-                IERC20(usdcToken).approve(swapRouter, employeeAmount),
-                "USDC approval to router failed"
-            );
-            ExactInputSingleParams memory params = ExactInputSingleParams({
-                tokenIn: usdcToken,
-                tokenOut: targetToken,
-                fee: 3000,
-                recipient: stream.employee,
-                deadline: block.timestamp + 300,
-                amountIn: employeeAmount,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            });
-            ISwapRouter(swapRouter).exactInputSingle(params);
-        } else {
-            require(
-                IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                "USDC transfer to employee failed"
-            );
-        }
-
+        _disburseFunds(streamId, stream.employee, claimable);
         emit FundsWithdrawn(streamId, stream.employee, claimable);
     }
 
@@ -502,45 +442,8 @@ contract StreamingPayroll {
             ITreasuryBufferManager(treasuryBufferManager).removeStreamCommitment(stream.employer, streamId);
         }
 
-        // Send accrued to employee
         if (claimable > 0) {
-            uint256 coopFee = _routeCoopFee(claimable);
-            address referrer = referrers[stream.employee];
-            uint256 referralBonus = 0;
-            if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
-                referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
-            }
-            uint256 employeeAmount = claimable - coopFee - referralBonus;
-            address targetToken = targetPayoutTokens[streamId];
-            if (targetToken != address(0) && targetToken != usdcToken) {
-                require(swapRouter != address(0), "Swap router not set");
-                require(
-                    IERC20(usdcToken).approve(swapRouter, employeeAmount),
-                    "USDC approval to router failed"
-                );
-                ExactInputSingleParams memory params = ExactInputSingleParams({
-                    tokenIn: usdcToken,
-                    tokenOut: targetToken,
-                    fee: 3000,
-                    recipient: stream.employee,
-                    deadline: block.timestamp + 300,
-                    amountIn: employeeAmount,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                });
-                ISwapRouter(swapRouter).exactInputSingle(params);
-            } else {
-                require(
-                    IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                    "USDC transfer to employee failed"
-                );
-            }
-            if (referralBonus > 0) {
-                require(
-                    IERC20(usdcToken).transfer(referrer, referralBonus),
-                    "USDC referral transfer failed"
-                );
-            }
+            _disburseFunds(streamId, stream.employee, claimable);
             emit FundsWithdrawn(streamId, stream.employee, claimable);
         }
 
@@ -801,65 +704,7 @@ contract StreamingPayroll {
 
             if (claimable > 0) {
                 stream.accruedPaid += claimable;
-
-                uint256 coopFee = _routeCoopFee(claimable);
-
-                string memory country = streamCountries[streamId];
-                uint256 taxRate = taxRates[country];
-                address taxAuthority = taxAuthorities[country];
-
-                address referrer = referrers[stream.employee];
-                uint256 referralBonus = 0;
-                if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
-                    referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
-                }
-
-                uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable - coopFee - referralBonus;
-
-                if (taxRate > 0 && taxAuthority != address(0)) {
-                    taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount - coopFee - referralBonus;
-                }
-
-                if (taxAmount > 0) {
-                    require(
-                        IERC20(usdcToken).transfer(taxAuthority, taxAmount),
-                        "USDC tax transfer failed"
-                    );
-                }
-
-                if (referralBonus > 0) {
-                    require(
-                        IERC20(usdcToken).transfer(referrer, referralBonus),
-                        "USDC referral transfer failed"
-                    );
-                }
-
-                address targetToken = targetPayoutTokens[streamId];
-                if (targetToken != address(0) && targetToken != usdcToken) {
-                    require(swapRouter != address(0), "Swap router not set");
-                    require(
-                        IERC20(usdcToken).approve(swapRouter, employeeAmount),
-                        "USDC approval to router failed"
-                    );
-                    ExactInputSingleParams memory params = ExactInputSingleParams({
-                        tokenIn: usdcToken,
-                        tokenOut: targetToken,
-                        fee: 3000,
-                        recipient: stream.employee,
-                        deadline: block.timestamp + 300,
-                        amountIn: employeeAmount,
-                        amountOutMinimum: 0,
-                        sqrtPriceLimitX96: 0
-                    });
-                    ISwapRouter(swapRouter).exactInputSingle(params);
-                } else {
-                    require(
-                        IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                        "USDC transfer to employee failed"
-                    );
-                }
+                _disburseFunds(streamId, stream.employee, claimable);
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
             }
             
@@ -909,65 +754,7 @@ contract StreamingPayroll {
                     stream.isActive = false;
                 }
 
-                uint256 coopFee = _routeCoopFee(claimable);
-
-                string memory country = streamCountries[streamId];
-                uint256 taxRate = taxRates[country];
-                address taxAuthority = taxAuthorities[country];
-
-                address referrer = referrers[stream.employee];
-                uint256 referralBonus = 0;
-                if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
-                    referralBonus = (claimable * referralBonuses[stream.employee]) / 10000;
-                }
-
-                uint256 taxAmount = 0;
-                uint256 employeeAmount = claimable - coopFee - referralBonus;
-
-                if (taxRate > 0 && taxAuthority != address(0)) {
-                    taxAmount = (claimable * taxRate) / 10000;
-                    employeeAmount = claimable - taxAmount - coopFee - referralBonus;
-                }
-
-                if (taxAmount > 0) {
-                    require(
-                        IERC20(usdcToken).transfer(taxAuthority, taxAmount),
-                        "USDC tax transfer failed"
-                    );
-                }
-
-                if (referralBonus > 0) {
-                    require(
-                        IERC20(usdcToken).transfer(referrer, referralBonus),
-                        "USDC referral transfer failed"
-                    );
-                }
-
-                address targetToken = targetPayoutTokens[streamId];
-                if (targetToken != address(0) && targetToken != usdcToken) {
-                    require(swapRouter != address(0), "Swap router not set");
-                    require(
-                        IERC20(usdcToken).approve(swapRouter, employeeAmount),
-                        "USDC approval to router failed"
-                    );
-                    ExactInputSingleParams memory params = ExactInputSingleParams({
-                        tokenIn: usdcToken,
-                        tokenOut: targetToken,
-                        fee: 3000,
-                        recipient: stream.employee,
-                        deadline: block.timestamp + 300,
-                        amountIn: employeeAmount,
-                        amountOutMinimum: 0,
-                        sqrtPriceLimitX96: 0
-                    });
-                    ISwapRouter(swapRouter).exactInputSingle(params);
-                } else {
-                    require(
-                        IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                        "USDC transfer to employee failed"
-                    );
-                }
-
+                _disburseFunds(streamId, stream.employee, claimable);
                 emit FundsWithdrawn(streamId, stream.employee, claimable);
             }
         }
@@ -995,6 +782,68 @@ contract StreamingPayroll {
             IMicroBenefitsVault(benefitsVault).notifyCoopFee(coopFee);
         }
         return coopFee;
+    }
+
+    function _disburseFunds(bytes32 streamId, address employee, uint256 claimable) internal {
+        if (claimable == 0) return;
+        uint256 coopFee = _routeCoopFee(claimable);
+
+        string memory country = streamCountries[streamId];
+        uint256 taxRate = taxRates[country];
+        address taxAuthority = taxAuthorities[country];
+
+        address referrer = referrers[employee];
+        uint256 referralBonus = 0;
+        if (referrer != address(0) && referralBonuses[employee] > 0) {
+            referralBonus = (claimable * referralBonuses[employee]) / 10000;
+        }
+
+        uint256 taxAmount = 0;
+        uint256 employeeAmount = claimable - coopFee - referralBonus;
+
+        if (taxRate > 0 && taxAuthority != address(0)) {
+            taxAmount = (claimable * taxRate) / 10000;
+            employeeAmount = claimable - taxAmount - coopFee - referralBonus;
+        }
+
+        if (taxAmount > 0) {
+            require(
+                IERC20(usdcToken).transfer(taxAuthority, taxAmount),
+                "USDC tax transfer failed"
+            );
+        }
+
+        if (referralBonus > 0) {
+            require(
+                IERC20(usdcToken).transfer(referrer, referralBonus),
+                "USDC referral transfer failed"
+            );
+        }
+
+        address targetToken = targetPayoutTokens[streamId];
+        if (targetToken != address(0) && targetToken != usdcToken) {
+            require(swapRouter != address(0), "Swap router not set");
+            require(
+                IERC20(usdcToken).approve(swapRouter, employeeAmount),
+                "USDC approval to router failed"
+            );
+            ExactInputSingleParams memory params = ExactInputSingleParams({
+                tokenIn: usdcToken,
+                tokenOut: targetToken,
+                fee: 3000,
+                recipient: employee,
+                deadline: block.timestamp + 300,
+                amountIn: employeeAmount,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+            ISwapRouter(swapRouter).exactInputSingle(params);
+        } else {
+            require(
+                IERC20(usdcToken).transfer(employee, employeeAmount),
+                "USDC transfer to employee failed"
+            );
+        }
     }
 
     /**
@@ -1109,66 +958,7 @@ contract StreamingPayroll {
             stream.isActive = false;
         }
 
-        uint256 coopFee = _routeCoopFee(payout);
-
-        // Calculate tax withholding split
-        string memory country = streamCountries[streamId];
-        uint256 taxRate = taxRates[country];
-        address taxAuthority = taxAuthorities[country];
-
-        address referrer = referrers[stream.employee];
-        uint256 referralBonus = 0;
-        if (referrer != address(0) && referralBonuses[stream.employee] > 0) {
-            referralBonus = (payout * referralBonuses[stream.employee]) / 10000;
-        }
-
-        uint256 taxAmount = 0;
-        uint256 employeeAmount = payout - coopFee - referralBonus;
-
-        if (taxRate > 0 && taxAuthority != address(0)) {
-            taxAmount = (payout * taxRate) / 10000;
-            employeeAmount = payout - taxAmount - coopFee - referralBonus;
-        }
-
-        if (taxAmount > 0) {
-            require(
-                IERC20(usdcToken).transfer(taxAuthority, taxAmount),
-                "USDC tax transfer failed"
-            );
-        }
-
-        if (referralBonus > 0) {
-            require(
-                IERC20(usdcToken).transfer(referrer, referralBonus),
-                "USDC referral transfer failed"
-            );
-        }
-
-        address targetToken = targetPayoutTokens[streamId];
-        if (targetToken != address(0) && targetToken != usdcToken) {
-            require(swapRouter != address(0), "Swap router not set");
-            require(
-                IERC20(usdcToken).approve(swapRouter, employeeAmount),
-                "USDC approval to router failed"
-            );
-            ExactInputSingleParams memory params = ExactInputSingleParams({
-                tokenIn: usdcToken,
-                tokenOut: targetToken,
-                fee: 3000,
-                recipient: stream.employee,
-                deadline: block.timestamp + 300,
-                amountIn: employeeAmount,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            });
-            ISwapRouter(swapRouter).exactInputSingle(params);
-        } else {
-            require(
-                IERC20(usdcToken).transfer(stream.employee, employeeAmount),
-                "USDC transfer to employee failed"
-            );
-        }
-
+        _disburseFunds(streamId, stream.employee, payout);
         emit PrivateFundsWithdrawn(streamId, stream.employee, payout);
     }
 
