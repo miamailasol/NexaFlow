@@ -112,7 +112,7 @@ export default function StreamsPage() {
                 type="text"
                 className="form-input"
                 placeholder="e.g. Tan Wei Liang"
-                value={newEmployeeName}
+                value={newEmployeeName || ''}
                 onChange={(e) => setNewEmployeeName(e.target.value)}
                 required
               />
@@ -125,7 +125,7 @@ export default function StreamsPage() {
                 type="text"
                 className="form-input"
                 placeholder="e.g. Backend Developer"
-                value={newEmployeeRole}
+                value={newEmployeeRole || ''}
                 onChange={(e) => setNewEmployeeRole(e.target.value)}
               />
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Designation or department.</div>
@@ -135,7 +135,7 @@ export default function StreamsPage() {
               <label className="form-label">Local Currency / Country</label>
               <select
                 className="form-input"
-                value={newEmployeeLoc}
+                value={newEmployeeLoc || 'Singapore 🇸🇬'}
                 onChange={(e) => setNewEmployeeLoc(e.target.value)}
               >
                 <option value="Singapore 🇸🇬">Singapore 🇸🇬 (SGD)</option>
@@ -176,7 +176,7 @@ export default function StreamsPage() {
               <input
                 type="number"
                 className="form-input"
-                value={newEmployeeCap}
+                value={newEmployeeCap || ''}
                 onChange={(e) => setNewEmployeeCap(e.target.value)}
                 required
               />
@@ -191,7 +191,7 @@ export default function StreamsPage() {
                 type="text"
                 className="form-input"
                 placeholder="0x..."
-                value={newEmployeeAddress}
+                value={newEmployeeAddress || ''}
                 onChange={(e) => setNewEmployeeAddress(e.target.value)}
                 required
               />
@@ -208,7 +208,7 @@ export default function StreamsPage() {
                 max="0.02"
                 step="0.0005"
                 className="range-slider"
-                value={newEmployeeRate}
+                value={newEmployeeRate || 0.004}
                 onChange={(e) => setNewEmployeeRate(e.target.value)}
               />
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -220,7 +220,7 @@ export default function StreamsPage() {
               <input
                 type="checkbox"
                 id="privacy-mode-toggle"
-                checked={isPrivateMode}
+                checked={isPrivateMode || false}
                 onChange={(e) => setIsPrivateMode(e.target.checked)}
                 style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-secondary)' }}
               />
@@ -242,7 +242,7 @@ export default function StreamsPage() {
               </label>
               <select
                 className="form-input"
-                value={recipientTokenChoice}
+                value={recipientTokenChoice || 'USDC'}
                 onChange={(e) => setRecipientTokenChoice(e.target.value)}
                 style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', width: '100%', cursor: 'pointer' }}
               >
@@ -266,7 +266,7 @@ export default function StreamsPage() {
               <input
                 type="checkbox"
                 id="peg-to-fiat-toggle"
-                checked={pegToFiat}
+                checked={pegToFiat || false}
                 onChange={(e) => setPegToFiat(e.target.checked)}
                 style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
               />
@@ -287,7 +287,7 @@ export default function StreamsPage() {
                   <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold' }}>Select Fiat Currency</label>
                   <select
                     className="form-input"
-                    value={fiatCurrency}
+                    value={fiatCurrency || 'SGD'}
                     onChange={(e) => setFiatCurrency(e.target.value)}
                     style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', width: '100%', cursor: 'pointer' }}
                   >
@@ -301,7 +301,7 @@ export default function StreamsPage() {
                   <input
                     type="number"
                     className="form-input"
-                    value={fiatMonthlySalary}
+                    value={fiatMonthlySalary || ''}
                     onChange={(e) => setFiatMonthlySalary(Number(e.target.value))}
                     min="1"
                     style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', width: '100%' }}
@@ -375,7 +375,7 @@ export default function StreamsPage() {
                 rows={5}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', resize: 'vertical' }}
                 placeholder="Worker Address,Flow Rate (USDC/sec),Total Cap (USDC),Name,Role,Country&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.005,1500,Tan Wei Liang,Senior React Developer,Singapore&#10;0x9e71a3371987d6f26d8251e18a8fdcb59296556e,0.002,500,Alice Smith,UI Designer,Brazil"
-                value={csvText}
+                value={csvText || ''}
                 onChange={(e) => {
                   setCsvText(e.target.value);
                   parseCsvData(e.target.value);
