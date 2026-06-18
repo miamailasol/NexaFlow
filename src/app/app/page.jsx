@@ -422,7 +422,7 @@ export default function DashboardOverview() {
               <input
                 type="number"
                 placeholder="USDC Amount"
-                value={bufferAmount}
+                value={bufferAmount || ''}
                 onChange={(e) => setBufferAmount(e.target.value)}
                 className="form-input"
                 style={{ flex: 1 }}
@@ -818,7 +818,7 @@ export default function DashboardOverview() {
               <input
                 type="number"
                 placeholder="USDC Amount"
-                value={withdrawLeftoverAmount}
+                value={withdrawLeftoverAmount || ''}
                 onChange={(e) => setWithdrawLeftoverAmount(e.target.value)}
                 className="form-input"
                 style={{ flexGrow: 1 }}
@@ -835,7 +835,7 @@ export default function DashboardOverview() {
               <input
                 type="text"
                 placeholder="New Oracle Address (0x...)"
-                value={newOracleAddress}
+                value={newOracleAddress || ''}
                 onChange={(e) => setNewOracleAddress(e.target.value)}
                 className="form-input"
                 style={{ flexGrow: 1 }}
@@ -1074,7 +1074,7 @@ export default function DashboardOverview() {
               type="text"
               className="form-input"
               placeholder="0x..."
-              value={referralEmployee}
+              value={referralEmployee || ''}
               onChange={(e) => setReferralEmployee(e.target.value)}
             />
           </div>
@@ -1084,7 +1084,7 @@ export default function DashboardOverview() {
               type="text"
               className="form-input"
               placeholder="0x..."
-              value={referralReferrer}
+              value={referralReferrer || ''}
               onChange={(e) => setReferralReferrer(e.target.value)}
             />
           </div>
@@ -1097,7 +1097,7 @@ export default function DashboardOverview() {
               step="0.1"
               min="0.1"
               max="5.0"
-              value={referralRate}
+              value={referralRate || ''}
               onChange={(e) => setReferralRate(e.target.value)}
             />
           </div>

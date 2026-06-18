@@ -132,7 +132,7 @@ export default function StakerPage() {
                   type="number"
                   className="form-input"
                   placeholder="USDC amount to stake"
-                  value={stakeAmount}
+                  value={stakeAmount || ''}
                   onChange={(e) => setStakeAmount(e.target.value)}
                   style={{ flexGrow: 1 }}
                 />
@@ -162,7 +162,7 @@ export default function StakerPage() {
                   type="number"
                   className="form-input"
                   placeholder="Shares to redeem"
-                  value={unstakeShares}
+                  value={unstakeShares || ''}
                   onChange={(e) => setUnstakeShares(e.target.value)}
                   style={{ flexGrow: 1 }}
                 />

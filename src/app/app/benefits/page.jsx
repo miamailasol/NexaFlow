@@ -104,7 +104,7 @@ export default function BenefitsPage() {
                   min="0"
                   max="30"
                   className="range-slider"
-                  value={benefitsConfig.health}
+                  value={benefitsConfig.health || 0}
                   onChange={(e) => handleBenefitsSplitChange('health', e.target.value)}
                 />
               </div>
@@ -119,7 +119,7 @@ export default function BenefitsPage() {
                   min="0"
                   max="30"
                   className="range-slider"
-                  value={benefitsConfig.retirement}
+                  value={benefitsConfig.retirement || 0}
                   onChange={(e) => handleBenefitsSplitChange('retirement', e.target.value)}
                 />
               </div>
@@ -134,7 +134,7 @@ export default function BenefitsPage() {
                   min="0"
                   max="30"
                   className="range-slider"
-                  value={benefitsConfig.emergency}
+                  value={benefitsConfig.emergency || 0}
                   onChange={(e) => handleBenefitsSplitChange('emergency', e.target.value)}
                 />
               </div>
@@ -160,7 +160,7 @@ export default function BenefitsPage() {
                   <input
                     type="number"
                     className="form-input"
-                    value={depositAmount}
+                    value={depositAmount || ''}
                     onChange={(e) => setDepositAmount(e.target.value)}
                     required
                   />
@@ -297,7 +297,7 @@ export default function BenefitsPage() {
                 <input
                   type="number"
                   className="form-input"
-                  value={billAmount}
+                  value={billAmount || ''}
                   onChange={(e) => setBillAmount(e.target.value)}
                   required
                 />

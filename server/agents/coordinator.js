@@ -66,7 +66,7 @@ if (isDemoMode) {
 function createAgentModel(agentName, tools) {
   if (isDemoMode) return null;
   const model = new ChatOpenAI({
-    modelName: "deepseek-v4-pro",
+    modelName: "deepseek-chat",
     temperature: 0,
     openAIApiKey: DEEPSEEK_API_KEY,
     configuration: {

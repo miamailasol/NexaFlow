@@ -26,7 +26,7 @@ const ARC_TESTNET = arcTestnet;
 
 const publicClient = createPublicClient({
   chain: ARC_TESTNET,
-  transport: http(),
+  transport: http(process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network"),
 });
 
 // ─── Wallet Client (requires PRIVATE_KEY in env) ────────────────────
@@ -39,7 +39,7 @@ if (PRIVATE_KEY) {
   walletClient = createWalletClient({
     account: deployerAccount,
     chain: ARC_TESTNET,
-    transport: http(),
+    transport: http(process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network"),
   });
 } else {
   console.warn("⚠️  PRIVATE_KEY not set — write operations (payments, stream creation) will fail.");

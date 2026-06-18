@@ -28,6 +28,7 @@ export default function AppLayoutClient({ children }) {
     toastShow,
     toastTitle,
     toastBody,
+    toastTxHash,
     isBridgeModalOpen,
     setIsBridgeModalOpen,
     bridgeAmount,
@@ -60,7 +61,32 @@ export default function AppLayoutClient({ children }) {
           <span className="badge badge-success">Secure Network</span>
         </div>
         <div style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)' }}>{toastTitle}</div>
-        <div className="payout-toast-body">{toastBody}</div>
+        <div className="payout-toast-body">
+          {toastBody}
+          {toastTxHash && (
+            <div style={{ marginTop: '8px' }}>
+              <a 
+                href={`https://testnet.arcscan.app/tx/${toastTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="toast-explorer-link"
+                style={{ 
+                  color: 'var(--color-primary)', 
+                  fontWeight: '800', 
+                  fontSize: '11px',
+                  textDecoration: 'underline',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              >
+                <span>View on Arcscan</span>
+                <ArrowRight size={10} style={{ strokeWidth: '3px' }} />
+              </a>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mobile Top Navbar Header */}
@@ -229,7 +255,7 @@ export default function AppLayoutClient({ children }) {
                     <input 
                       type="number" 
                       className="form-input" 
-                      value={bridgeAmount} 
+                      value={bridgeAmount || ''} 
                       onChange={(e) => setBridgeAmount(e.target.value)}
                     />
                   </div>

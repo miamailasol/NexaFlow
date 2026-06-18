@@ -306,36 +306,21 @@ app.post('/api/treasury/transfer-dcw', async (req, res) => {
 import crypto from 'crypto';
 
 let resolvedCircleBaseUrl = 'https://api.circle.com';
+const globalAppId = process.env.CIRCLE_APP_ID || 'mock-app-id-9988-7766';
 
 const detectCircleBaseUrl = async () => {
   const apiKey = process.env.CIRCLE_API_KEY;
   if (!apiKey) return;
 
-  try {
-    // Try sandbox first
-    const res = await fetch('https://api-sandbox.circle.com/v1/w3s/config/entity', {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (res.status === 200 || res.status === 400) {
-      resolvedCircleBaseUrl = 'https://api-sandbox.circle.com';
-      console.log('Circle environment auto-detected: SANDBOX (https://api-sandbox.circle.com)');
-      return;
-    }
-  } catch (e) {}
+  if (apiKey.includes('sandbox') || apiKey.startsWith('SAND_')) {
+    resolvedCircleBaseUrl = 'https://api-sandbox.circle.com';
+    console.log('Circle environment auto-detected: SANDBOX (https://api-sandbox.circle.com)');
+  } else {
+    resolvedCircleBaseUrl = 'https://api.circle.com';
+    console.log('Circle environment auto-detected: PRODUCTION/TESTNET (https://api.circle.com)');
+  }
 
-  try {
-    // Try production / testnet
-    const res = await fetch('https://api.circle.com/v1/w3s/config/entity', {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (res.status === 200 || res.status === 400) {
-      resolvedCircleBaseUrl = 'https://api.circle.com';
-      console.log('Circle environment auto-detected: PRODUCTION/TESTNET (https://api.circle.com)');
-      return;
-    }
-  } catch (e) {}
-
-  console.log('Using default Circle environment: PRODUCTION (https://api.circle.com)');
+  console.log(`Using Circle environment URL: ${resolvedCircleBaseUrl}`);
 };
 
 // Auto-detect environment on module load
@@ -396,11 +381,43 @@ app.post('/api/ucw/session', async (req, res) => {
     const walletsData = await walletsRes.json();
     const wallets = walletsData?.data?.wallets || [];
 
-    if (wallets.length > 0) {
+    const arcWallet = wallets.find(w => w.blockchain.toUpperCase() === 'ARC-TESTNET');
+
+    if (arcWallet) {
       return res.json({
         success: true,
         status: 'ACTIVE',
-        wallets,
+        wallets: [arcWallet],
+        userToken,
+        encryptionKey,
+        appId,
+        circleServiceUrl
+      });
+    }
+
+    if (wallets.length > 0 && !arcWallet) {
+      console.log(`User has wallets but none on ARC-TESTNET. Requesting wallet creation challenge...`);
+      const walletRes = await fetch(`${baseUrl}/v1/w3s/user/wallets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'X-User-Token': userToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          blockchains: ['ARC-TESTNET'],
+          accountType: 'SCA'
+        })
+      });
+      const walletData = await walletRes.json();
+      if (!walletRes.ok) {
+        throw new Error(walletData?.message || 'Failed to create wallet challenge');
+      }
+      return res.json({
+        success: true,
+        status: 'INITIALIZING',
+        challengeId: walletData.data.challengeId,
         userToken,
         encryptionKey,
         appId,
@@ -432,7 +449,7 @@ app.post('/api/ucw/session', async (req, res) => {
       },
       body: JSON.stringify({
         idempotencyKey: crypto.randomUUID(),
-        blockchains: ['ETH-SEPOLIA'],
+        blockchains: ['ARC-TESTNET'],
         accountType: 'SCA'
       })
     });
@@ -465,7 +482,7 @@ app.post('/api/ucw/session', async (req, res) => {
         },
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
-          blockchains: ['ETH-SEPOLIA'],
+          blockchains: ['ARC-TESTNET'],
           accountType: 'SCA'
         })
       });
@@ -539,8 +556,10 @@ app.post('/api/ucw/transfer', async (req, res) => {
     res.json({
       success: true,
       challengeId: txData.data.challengeId,
+      txId: txData.data.id,
       userToken,
       encryptionKey,
+      appId: globalAppId,
       circleServiceUrl
     });
   } catch (err) {
@@ -589,6 +608,7 @@ app.post('/api/ucw/contract-execution', async (req, res) => {
       })
     });
     const txData = await txRes.json();
+    console.log('Contract execution txData:', JSON.stringify(txData));
     if (!txRes.ok) {
       throw new Error(txData?.message || 'Failed to create contract execution challenge');
     }
@@ -596,8 +616,10 @@ app.post('/api/ucw/contract-execution', async (req, res) => {
     res.json({
       success: true,
       challengeId: txData.data.challengeId,
+      txId: txData.data.id,
       userToken,
       encryptionKey,
+      appId: globalAppId,
       circleServiceUrl
     });
   } catch (err) {
@@ -605,6 +627,85 @@ app.post('/api/ucw/contract-execution', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+app.get('/api/ucw/transaction-by-challenge', async (req, res) => {
+  const { walletId, challengeId, since } = req.query;
+  if (!walletId) {
+    return res.status(400).json({ success: false, error: 'Missing walletId parameter' });
+  }
+  const API_KEY = process.env.CIRCLE_API_KEY;
+  const baseUrl = resolvedCircleBaseUrl;
+  try {
+    console.log(`[UCW Log] Querying transactions for walletId: ${walletId}, since: ${since}`);
+    const txRes = await fetch(`${baseUrl}/v1/w3s/transactions?walletIds=${walletId}&order=DESC&pageSize=10`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const txData = await txRes.json();
+    if (!txRes.ok) {
+      throw new Error(txData?.message || 'Failed to list transactions');
+    }
+    
+    // Find the transaction created after `since` (allow 15s clock drift)
+    const sinceTime = since ? parseInt(since, 10) : Date.now() - 60000;
+    const matchingTx = (txData.data?.transactions || []).find(tx => {
+      const createTime = new Date(tx.createDate).getTime();
+      return createTime >= (sinceTime - 15000);
+    });
+    
+    res.json({
+      success: true,
+      transaction: matchingTx || null
+    });
+  } catch (err) {
+    console.error('UCW query transaction by challenge error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/ucw/latest-transaction', async (req, res) => {
+  const { walletId, blockchain = 'ARC-TESTNET' } = req.query;
+  if (!walletId) {
+    return res.status(400).json({ success: false, error: 'Missing walletId parameter' });
+  }
+  const API_KEY = process.env.CIRCLE_API_KEY;
+  const baseUrl = resolvedCircleBaseUrl;
+  try {
+    console.log(`[UCW Log] Querying transactions at URL: ${baseUrl}/v1/w3s/transactions?walletIds=${walletId}&order=DESC&pageSize=5`);
+    const txRes = await fetch(`${baseUrl}/v1/w3s/transactions?walletIds=${walletId}&order=DESC&pageSize=5`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const txData = await txRes.json();
+    console.log(`[UCW Log] Response Status: ${txRes.status}. Data:`, JSON.stringify(txData));
+    if (!txRes.ok) {
+      throw new Error(txData?.message || 'Failed to list transactions');
+    }
+    
+    // Find the latest transaction that is recent (created within last 3 minutes) and matches the blockchain
+    const now = Date.now();
+    const recentTx = (txData.data?.transactions || []).find(tx => {
+      const createTime = new Date(tx.createDate).getTime();
+      const isBlockchainMatch = tx.blockchain.toUpperCase() === blockchain.toUpperCase();
+      return isBlockchainMatch && (now - createTime) < 180000; // 3 minutes
+    });
+
+    res.json({
+      success: true,
+      transaction: recentTx || null
+    });
+  } catch (err) {
+    console.error('UCW latest transaction error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`NexaFlow Treasury DCW/UCW backend service running at http://localhost:${PORT}`);

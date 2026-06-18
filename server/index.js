@@ -14,7 +14,8 @@
 
 import express from "express";
 import cors from "cors";
-import { createPublicClient, http, formatUnits } from "viem";
+import { createPublicClient, http, formatUnits, keccak256, toHex } from "viem";
+
 
 import {
   processClaimWithAgents,
@@ -24,14 +25,15 @@ import {
   getAgentRegistry,
 } from "./agents/coordinator.js";
 
-import { getAgentBudget } from "./agents/tools.js";
+import { getAgentBudget, checkComplianceTool } from "./agents/tools.js";
 import {
   getSuggestions,
   addSuggestion,
   voteSuggestion,
   addComment,
   getProfile,
-  saveProfile
+  saveProfile,
+  addX402Record
 } from "./database.js";
 
 import {
@@ -423,6 +425,43 @@ app.post("/api/demo/seed", async (req, res) => {
       success: false,
       error: error.message,
     });
+  }
+});
+
+/**
+ * GET /api/demo/compliance-check/:address — Demo compliance check bypass that charges simulated x402 nanopayment
+ */
+app.get("/api/demo/compliance-check/:address", async (req, res) => {
+  try {
+    // Run the real screening flow to register activity log
+    const agentResult = await screenAddressWithAgents(req.params.address);
+    
+    // Run tool directly to get structured riskScore, isCompliant, recommendation
+    const complianceResultStr = await checkComplianceTool.invoke({ address: req.params.address, checkType: "FULL" });
+    const complianceResult = JSON.parse(complianceResultStr);
+
+    // Simulate x402 payment fee $0.0005 in local ledger
+    const defaultAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+    const paymentRecord = {
+      type: "PAYMENT",
+      buyer: defaultAddress,
+      seller: "0xCA2DE969C3266f530a27bE3B46EC0550cF609c67",
+      amount: 0.0005,
+      resource: "OFAC/sanctions compliance screening",
+      signature: keccak256(toHex(`compliance-${req.params.address}-${Date.now()}`)),
+      timestamp: new Date().toISOString(),
+      settled: true,
+    };
+    await addX402Record(paymentRecord);
+    
+    res.json({
+      success: true,
+      result: complianceResult,
+      agentResult,
+      payment: paymentRecord
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

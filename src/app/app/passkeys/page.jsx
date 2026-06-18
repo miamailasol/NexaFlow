@@ -272,13 +272,14 @@ export default function PasskeysPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '12px' }}>
-                    <span className="badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--color-primary)', border: '1px solid rgba(0, 242, 254, 0.3)' }}>
+                    <span className="badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#0284c7', border: '1px solid rgba(0, 242, 254, 0.3)', fontWeight: '700' }}>
                       Circle SCA Account
                     </span>
                     <span className="badge" style={{ 
                       background: 'rgba(52, 211, 153, 0.15)', 
-                      color: 'var(--color-success)', 
-                      border: '1px solid rgba(52, 211, 153, 0.3)' 
+                      color: '#047857', 
+                      border: '1px solid rgba(52, 211, 153, 0.3)',
+                      fontWeight: '700'
                     }}>
                       Circle PIN Active
                     </span>
@@ -444,7 +445,7 @@ export default function PasskeysPage() {
                           type="number"
                           placeholder="USDC Amount"
                           className="form-input"
-                          value={transferAmountToDcw}
+                          value={transferAmountToDcw || ''}
                           onChange={(e) => setTransferAmountToDcw(e.target.value)}
                           style={{ fontSize: '12px', padding: '6px 10px' }}
                         />
@@ -470,7 +471,7 @@ export default function PasskeysPage() {
                           type="number"
                           placeholder="USDC Amount"
                           className="form-input"
-                          value={transferAmountFromDcw}
+                          value={transferAmountFromDcw || ''}
                           onChange={(e) => setTransferAmountFromDcw(e.target.value)}
                           style={{ fontSize: '12px', padding: '6px 10px' }}
                         />
@@ -502,7 +503,7 @@ export default function PasskeysPage() {
                         type="text"
                         placeholder="Recipient Address (0x...)"
                         className="form-input"
-                        value={customRecipient}
+                        value={customRecipient || ''}
                         onChange={(e) => setCustomRecipient(e.target.value)}
                         style={{ fontSize: '12px', padding: '8px 12px' }}
                       />
@@ -510,7 +511,7 @@ export default function PasskeysPage() {
                         type="number"
                         placeholder="USDC Amount"
                         className="form-input"
-                        value={customTransferAmount}
+                        value={customTransferAmount || ''}
                         onChange={(e) => setCustomTransferAmount(e.target.value)}
                         style={{ fontSize: '12px', padding: '8px 12px' }}
                       />
@@ -580,7 +581,7 @@ export default function PasskeysPage() {
                   type="number"
                   placeholder="e.g. 50.00"
                   className="form-input"
-                  value={sponsorDepositAmount}
+                  value={sponsorDepositAmount || ''}
                   onChange={(e) => setSponsorDepositAmount(e.target.value)}
                   style={{ paddingRight: '60px' }}
                 />
@@ -625,7 +626,7 @@ export default function PasskeysPage() {
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-muted)' }}>Target Worker Wallet</label>
             <select
               className="form-input"
-              value={selectedWorkerForConfig}
+              value={selectedWorkerForConfig || ''}
               onChange={(e) => setSelectedWorkerForConfig(e.target.value)}
             >
               <option value="">-- Select Worker --</option>
@@ -644,7 +645,7 @@ export default function PasskeysPage() {
                 type="number"
                 placeholder="e.g. 10"
                 className="form-input"
-                value={maxTxLimitInput}
+                value={maxTxLimitInput || ''}
                 onChange={(e) => setMaxTxLimitInput(e.target.value)}
               />
             </div>
@@ -654,7 +655,7 @@ export default function PasskeysPage() {
                 type="number"
                 placeholder="e.g. 50"
                 className="form-input"
-                value={maxGasPriceInput}
+                value={maxGasPriceInput || ''}
                 onChange={(e) => setMaxGasPriceInput(e.target.value)}
               />
             </div>

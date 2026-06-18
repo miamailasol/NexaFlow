@@ -8,7 +8,8 @@ import {
   useSwitchChain,
   useSignMessage
 } from 'wagmi';
-import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs, getAddress } from 'viem';
+import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs, getAddress, encodePacked, createPublicClient, http } from 'viem';
+
 import { privateKeyToAccount } from 'viem/accounts';
 import { ethers } from 'ethers';
 import { arcTestnet } from 'viem/chains';
@@ -55,9 +56,19 @@ export const NexaFlowProvider = ({ children }) => {
   const { address, isConnected, chainId } = useAccount();
   const { disconnect } = useDisconnect();
   const publicClient = usePublicClient();
+  
+  // Dedicated Arc Testnet client for reliable dashboard reads regardless of user's active wallet network
+  const arcPublicClient = React.useMemo(() => {
+    return createPublicClient({
+      chain: arcTestnet,
+      transport: http("https://rpc.testnet.arc.network")
+    });
+  }, []);
+
   const { writeContractAsync } = useWriteContract();
   const { switchChainAsync } = useSwitchChain();
   const { signMessageAsync } = useSignMessage();
+
 
   // Basic Token and Allowance Reads
   const { data: usdcBalRaw, refetch: refetchUsdc } = useReadContract({
@@ -65,6 +76,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: USDC_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const usdcBalance = usdcBalRaw ? Number(formatUnits(usdcBalRaw, 6)) : 0;
@@ -74,6 +86,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: USDC_ABI,
     functionName: 'allowance',
     args: address ? [address, STREAMING_PAYROLL_ADDRESS] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const allowance = allowanceRaw ? Number(formatUnits(allowanceRaw, 6)) : 0;
@@ -84,6 +97,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: USDC_ABI,
     functionName: 'allowance',
     args: address ? [address, MICRO_BENEFITS_VAULT_ADDRESS] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const benefitsAllowance = benefitsAllowanceRaw ? Number(formatUnits(benefitsAllowanceRaw, 6)) : 0;
@@ -93,6 +107,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: MICRO_BENEFITS_VAULT_ABI,
     functionName: 'members',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const isRegistered = memberAccountRaw ? memberAccountRaw[4] : false;
@@ -104,22 +119,25 @@ export const NexaFlowProvider = ({ children }) => {
   const { data: coopTreasuryRaw, refetch: refetchCoopTreasury } = useReadContract({
     address: MICRO_BENEFITS_VAULT_ADDRESS,
     abi: MICRO_BENEFITS_VAULT_ABI,
-    functionName: 'coopTreasuryPool'
+    functionName: 'insuranceCoopTreasury',
+    chainId: 5042002
   });
   const coopTreasuryPool = coopTreasuryRaw ? Number(formatUnits(coopTreasuryRaw, 6)) : 0;
 
   const { data: totalSharesRaw, refetch: refetchTotalCoopShares } = useReadContract({
     address: MICRO_BENEFITS_VAULT_ADDRESS,
     abi: MICRO_BENEFITS_VAULT_ABI,
-    functionName: 'totalCoopShares'
+    functionName: 'totalCoopShares',
+    chainId: 5042002
   });
   const totalCoopShares = totalSharesRaw ? Number(formatUnits(totalSharesRaw, 6)) : 0;
 
   const { data: userSharesRaw, refetch: refetchUserCoopShares } = useReadContract({
     address: MICRO_BENEFITS_VAULT_ADDRESS,
     abi: MICRO_BENEFITS_VAULT_ABI,
-    functionName: 'userCoopShares',
+    functionName: 'coopShares',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const userCoopShares = userSharesRaw ? Number(formatUnits(userSharesRaw, 6)) : 0;
@@ -130,6 +148,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: USDC_ABI,
     functionName: 'allowance',
     args: address ? [address, TREASURY_BUFFER_MANAGER_ADDRESS] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const bufferAllowance = bufferAllowanceRaw ? Number(formatUnits(bufferAllowanceRaw, 6)) : 0;
@@ -139,6 +158,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: TREASURY_BUFFER_MANAGER_ABI,
     functionName: 'employerBuffers',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const employerBuffer = employerBufferRaw ? Number(formatUnits(employerBufferRaw, 6)) : 0;
@@ -148,6 +168,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: TREASURY_BUFFER_MANAGER_ABI,
     functionName: 'estimateDaysCovered',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const daysCovered = daysCoveredRaw ? Number(daysCoveredRaw) : 0;
@@ -157,6 +178,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: TREASURY_BUFFER_MANAGER_ABI,
     functionName: 'checkBufferStatus',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const isBufferWarning = warningStateRaw ? warningStateRaw[0] : false;
@@ -166,6 +188,7 @@ export const NexaFlowProvider = ({ children }) => {
     abi: STREAMING_PAYROLL_ABI,
     functionName: 'employerBalances',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const employerPayrollBalance = employerPayrollBalanceRaw ? Number(formatUnits(employerPayrollBalanceRaw, 6)) : 0;
@@ -175,9 +198,11 @@ export const NexaFlowProvider = ({ children }) => {
     abi: STREAMING_PAYROLL_ABI,
     functionName: 'totalMonthlyCommitment',
     args: address ? [address] : undefined,
+    chainId: 5042002,
     query: { enabled: !!address }
   });
   const totalMonthlyCommitment = totalMonthlyCommitmentRaw ? Number(formatUnits(totalMonthlyCommitmentRaw, 6)) : 0;
+
 
   const isWarningState = isBufferWarning;
 
@@ -362,6 +387,7 @@ export const NexaFlowProvider = ({ children }) => {
   const [toastShow, setToastShow] = useState(false);
   const [toastTitle, setToastTitle] = useState('');
   const [toastBody, setToastBody] = useState('');
+  const [toastTxHash, setToastTxHash] = useState(null);
   const [glowTargetId, setGlowTargetId] = useState(null);
 
   // Active Contract Code
@@ -399,12 +425,16 @@ export const NexaFlowProvider = ({ children }) => {
   };
 
   // Trigger Notification Toast
-  const triggerToast = (title, body, targetId = null) => {
+  const triggerToast = (title, body, targetId = null, txHash = null) => {
     setToastTitle(title);
     setToastBody(body);
+    setToastTxHash(txHash);
     setToastShow(true);
     setGlowTargetId(targetId);
-    setTimeout(() => setToastShow(false), 5000);
+    setTimeout(() => {
+      setToastShow(false);
+      setTimeout(() => setToastTxHash(null), 300);
+    }, 6000);
     setTimeout(() => setGlowTargetId(null), 2000);
   };
 
@@ -415,10 +445,19 @@ export const NexaFlowProvider = ({ children }) => {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          setPasskeyAccountAddress(parsed.accountAddress);
-          setPasskeyCredentialId(parsed.credentialId);
-          setPasskeyPubKeyX(parsed.pubKeyX);
-          setPasskeyPubKeyY(parsed.pubKeyY);
+          if (parsed.pubKeyX && parsed.pubKeyX.toUpperCase() !== 'ARC-TESTNET') {
+            console.log('Clearing legacy non-ARC-TESTNET wallet from localStorage:', parsed.pubKeyX);
+            localStorage.removeItem(`nexaflow_passkey_account_${address.toLowerCase()}`);
+            setPasskeyAccountAddress(null);
+            setPasskeyCredentialId(null);
+            setPasskeyPubKeyX(null);
+            setPasskeyPubKeyY(null);
+          } else {
+            setPasskeyAccountAddress(parsed.accountAddress);
+            setPasskeyCredentialId(parsed.credentialId);
+            setPasskeyPubKeyX(parsed.pubKeyX);
+            setPasskeyPubKeyY(parsed.pubKeyY);
+          }
         } catch (e) {
           console.error("Failed to parse passkey info", e);
         }
@@ -539,11 +578,12 @@ export const NexaFlowProvider = ({ children }) => {
         })
       });
       const data = await res.json();
+      console.log("Contract execution endpoint raw data:", data);
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to create execution challenge');
       }
 
-      const { challengeId, userToken, encryptionKey, appId, circleServiceUrl } = data;
+      const { challengeId, txId, userToken, encryptionKey, appId, circleServiceUrl } = data;
 
       const pinLoadingId = showLoadingModal({
         title: 'Sign Transaction',
@@ -551,26 +591,62 @@ export const NexaFlowProvider = ({ children }) => {
       });
 
       const txPromise = new Promise((resolveTx, rejectTx) => {
-        import('@circle-fin/w3s-pw-web-sdk').then(async ({ W3SSdk }) => {
+        import('@circle-fin/w3s-pw-web-sdk').then(({ W3SSdk }) => {
           const sdkInstance = new W3SSdk({ appSettings: { appId } });
           if (circleServiceUrl) {
             sdkInstance.serviceUrl = circleServiceUrl;
           }
           sdkInstance.setAuthentication({ userToken, encryptionKey });
-          await sdkInstance.getDeviceId();
 
           sdkInstance.execute(challengeId, (error, result) => {
             closeModal(pinLoadingId);
             if (error) {
               rejectTx(error);
             } else {
-              resolveTx(result?.txHash || result);
+              resolveTx(result);
             }
           });
         }).catch(rejectTx);
       });
 
-      const txHash = await txPromise;
+      const startTime = Date.now();
+      await txPromise;
+
+      // Poll backend for the transaction hash
+      const pollLoadingId = showLoadingModal({
+        title: 'Publishing Transaction',
+        description: 'Broadcasting transaction to Arc Testnet. Please wait...'
+      });
+
+      let txHash = null;
+      const maxRetries = 60; // 60 seconds max
+      for (let i = 0; i < maxRetries; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const statusRes = await fetch(`http://localhost:3011/api/ucw/transaction-by-challenge?walletId=${passkeyCredentialId}&challengeId=${challengeId}&since=${startTime}`);
+          const statusData = await statusRes.json();
+          if (statusData.success && statusData.transaction) {
+            if (statusData.transaction.state === 'FAILED') {
+              throw new Error(`Transaction failed on Circle: ${statusData.transaction.errorReason || 'Unknown failure reason'}`);
+            }
+            if (statusData.transaction.txHash) {
+              txHash = statusData.transaction.txHash;
+              break;
+            }
+          }
+        } catch (pollErr) {
+          console.error("Error polling transaction status:", pollErr);
+          if (pollErr.message.includes('failed on Circle')) {
+            throw pollErr;
+          }
+        }
+      }
+      closeModal(pollLoadingId);
+
+      if (!txHash) {
+        throw new Error('Transaction submission timed out or failed on Circle.');
+      }
+
       const miningId = showLoadingModal({
         title: 'Confirming Transaction',
         description: 'Awaiting block confirmation on Arc Testnet...'
@@ -637,7 +713,7 @@ export const NexaFlowProvider = ({ children }) => {
                 value
               });
               if (successMessage) {
-                triggerToast('Transaction Success', successMessage);
+                triggerToast('Transaction Success', successMessage, null, txHash);
               }
               if (onSuccess) await onSuccess(txHash, 'smart', passkeyAccountAddress);
               resolve(txHash);
@@ -668,7 +744,7 @@ export const NexaFlowProvider = ({ children }) => {
                 value
               });
               if (successMessage) {
-                triggerToast('Transaction Success', successMessage);
+                triggerToast('Transaction Success', successMessage, null, txHash);
               }
               if (onSuccess) await onSuccess(txHash, 'eoa', address);
               resolve(txHash);
@@ -703,7 +779,7 @@ export const NexaFlowProvider = ({ children }) => {
           value
         });
         if (successMessage) {
-          triggerToast('Transaction Success', successMessage);
+          triggerToast('Transaction Success', successMessage, null, txHash);
         }
         if (onSuccess) await onSuccess(txHash, 'smart', passkeyAccountAddress);
         return txHash;
@@ -734,7 +810,7 @@ export const NexaFlowProvider = ({ children }) => {
         value
       });
       if (successMessage) {
-        triggerToast('Transaction Success', successMessage);
+        triggerToast('Transaction Success', successMessage, null, txHash);
       }
       if (onSuccess) await onSuccess(txHash, 'eoa', address || '0x0000000000000000000000000000000000000000');
       return txHash;
@@ -807,7 +883,6 @@ export const NexaFlowProvider = ({ children }) => {
   // Load salary streams from chain
   useEffect(() => {
     const loadStreams = async () => {
-      if (!publicClient) return;
       const loaded = [];
       for (const id of streamIds) {
         try {
@@ -833,7 +908,7 @@ export const NexaFlowProvider = ({ children }) => {
             continue;
           }
 
-          let data = await publicClient.readContract({
+          let data = await arcPublicClient.readContract({
             address: STREAMING_PAYROLL_ADDRESS,
             abi: STREAMING_PAYROLL_ABI,
             functionName: 'streams',
@@ -842,7 +917,7 @@ export const NexaFlowProvider = ({ children }) => {
 
           let isPrivate = false;
           if (!data || data[0] === '0x0000000000000000000000000000000000000000') {
-            const privateData = await publicClient.readContract({
+            const privateData = await arcPublicClient.readContract({
               address: STREAMING_PAYROLL_ADDRESS,
               abi: STREAMING_PAYROLL_ABI,
               functionName: 'privateStreams',
@@ -857,7 +932,7 @@ export const NexaFlowProvider = ({ children }) => {
           if (data && data[0] !== '0x0000000000000000000000000000000000000000') {
             let targetPayoutToken = 'USDC';
             try {
-              const tokenAddr = await publicClient.readContract({
+              const tokenAddr = await arcPublicClient.readContract({
                 address: STREAMING_PAYROLL_ADDRESS,
                 abi: STREAMING_PAYROLL_ABI,
                 functionName: 'targetPayoutTokens',
@@ -870,7 +945,7 @@ export const NexaFlowProvider = ({ children }) => {
 
             let fiatPeg = '';
             try {
-              fiatPeg = await publicClient.readContract({
+              fiatPeg = await arcPublicClient.readContract({
                 address: STREAMING_PAYROLL_ADDRESS,
                 abi: STREAMING_PAYROLL_ABI,
                 functionName: 'fiatPegs',
@@ -880,7 +955,7 @@ export const NexaFlowProvider = ({ children }) => {
 
             let priority = 0;
             try {
-              const priorityRaw = await publicClient.readContract({
+              const priorityRaw = await arcPublicClient.readContract({
                 address: TREASURY_BUFFER_MANAGER_ADDRESS,
                 abi: TREASURY_BUFFER_MANAGER_ABI,
                 functionName: 'streamPriorities',
@@ -939,7 +1014,7 @@ export const NexaFlowProvider = ({ children }) => {
             }
           }
         } catch (err) {
-          console.error('Error fetching stream', id, err);
+          console.warn('Silent fallback: Error fetching stream', id, err.message);
         }
       }
 
@@ -947,10 +1022,9 @@ export const NexaFlowProvider = ({ children }) => {
         setEmployees(loaded);
       }
     };
-    if (publicClient) {
-      loadStreams();
-    }
-  }, [streamIds, publicClient]);
+    loadStreams();
+  }, [streamIds, arcPublicClient]);
+
 
   // Fetch oracles (SGD/BRL pegs)
   useEffect(() => {
@@ -960,14 +1034,14 @@ export const NexaFlowProvider = ({ children }) => {
         let brlRate = 5.00;
         
         try {
-          const sgdFeed = await publicClient.readContract({
+          const sgdFeed = await arcPublicClient.readContract({
             address: STREAMING_PAYROLL_ADDRESS,
             abi: STREAMING_PAYROLL_ABI,
             functionName: 'priceFeeds',
             args: ['SGD']
           });
           if (sgdFeed && sgdFeed !== '0x0000000000000000000000000000000000000000') {
-            const data = await publicClient.readContract({
+            const data = await arcPublicClient.readContract({
               address: sgdFeed,
               abi: [{
                 inputs: [],
@@ -989,14 +1063,14 @@ export const NexaFlowProvider = ({ children }) => {
         } catch (e) {}
 
         try {
-          const brlFeed = await publicClient.readContract({
+          const brlFeed = await arcPublicClient.readContract({
             address: STREAMING_PAYROLL_ADDRESS,
             abi: STREAMING_PAYROLL_ABI,
             functionName: 'priceFeeds',
             args: ['BRL']
           });
           if (brlFeed && brlFeed !== '0x0000000000000000000000000000000000000000') {
-            const data = await publicClient.readContract({
+            const data = await arcPublicClient.readContract({
               address: brlFeed,
               abi: [{
                 inputs: [],
@@ -1024,10 +1098,9 @@ export const NexaFlowProvider = ({ children }) => {
         console.warn("fetchOracleRates failed", err);
       }
     };
-    if (isConnected && publicClient) {
-      fetchOracleRates();
-    }
-  }, [isConnected, publicClient]);
+    fetchOracleRates();
+  }, [arcPublicClient]);
+
 
   // Request animation frame ticking values
   const requestRef = useRef();
@@ -1102,100 +1175,135 @@ export const NexaFlowProvider = ({ children }) => {
       return;
     }
     setIsPasskeyLoading(true);
-    triggerToast('WebAuthn Request', 'Generating biometric credentials on your device...');
+    triggerToast('Circle Web3 Services', 'Initializing User-Controlled Wallet session...');
 
     try {
-      let credIdBytes32;
-      let pubKeyX;
-      let pubKeyY;
-      let usedMock = false;
+      const res = await fetch('http://localhost:3011/api/ucw/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: address.toLowerCase() })
+      });
+      
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to initialize UCW session');
+      }
 
-      if (window.isSecureContext && navigator.credentials) {
-        try {
-          const challenge = new Uint8Array(32);
-          crypto.getRandomValues(challenge);
-          const credential = await navigator.credentials.create({
-            publicKey: {
-              challenge,
-              rp: { name: "NexaFlow Systems" },
-              user: {
-                id: new TextEncoder().encode(address.toLowerCase()),
-                name: "employee_" + address.slice(0, 8),
-                displayName: "NexaFlow Worker"
-              },
-              pubKeyCredParams: [{ alg: -7, type: "public-key" }],
-              timeout: 60000,
-              authenticatorSelection: {
-                authenticatorAttachment: "platform",
-                userVerification: "required"
-              }
+      // Case A: User already has an active wallet
+      if (data.status === 'ACTIVE' && data.wallets && data.wallets.length > 0) {
+        const wallet = data.wallets[0];
+        const accountInfo = {
+          accountAddress: wallet.address,
+          credentialId: wallet.id,
+          pubKeyX: wallet.blockchain, // repurposed for UI display
+          pubKeyY: wallet.state,      // repurposed for UI display
+          isMock: false
+        };
+
+        localStorage.setItem(`nexaflow_passkey_account_${address.toLowerCase()}`, JSON.stringify(accountInfo));
+        setPasskeyAccountAddress(wallet.address);
+        setPasskeyCredentialId(wallet.id);
+        setPasskeyPubKeyX(wallet.blockchain);
+        setPasskeyPubKeyY(wallet.state);
+
+        triggerToast('Circle Wallet Loaded', `Smart account active at ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`, 'success');
+        fetchSponsorBalance();
+        setIsPasskeyLoading(false);
+        return;
+      }
+
+      // Case B: First time initialization - execute the PIN challenge
+      const { challengeId, userToken, encryptionKey, appId, circleServiceUrl } = data;
+
+      const pinLoadingId = showLoadingModal({
+        title: 'Create Wallet PIN',
+        description: 'Opening Circle secure enclave. Please set up a secure PIN for your smart wallet.'
+      });
+
+      const pinPromise = new Promise((resolveChallenge, rejectChallenge) => {
+        import('@circle-fin/w3s-pw-web-sdk').then(({ W3SSdk }) => {
+          const sdkInstance = new W3SSdk({ appSettings: { appId } });
+          if (circleServiceUrl) {
+            sdkInstance.serviceUrl = circleServiceUrl;
+          }
+          sdkInstance.setAuthentication({ userToken, encryptionKey });
+
+          sdkInstance.execute(challengeId, (error, result) => {
+            closeModal(pinLoadingId);
+            if (error) {
+              rejectChallenge(error);
+            } else {
+              resolveChallenge(result);
             }
           });
-
-          const rawId = new Uint8Array(credential.rawId);
-          credIdBytes32 = keccak256(rawId);
-
-          const sha = new Uint8Array(32);
-          crypto.getRandomValues(sha);
-          pubKeyX = BigInt(keccak256(sha));
-          pubKeyY = BigInt(keccak256(new Uint8Array([...sha, 1])));
-        } catch (webauthnErr) {
-          console.warn("Native WebAuthn create failed, falling back to simulated passkey", webauthnErr);
-          usedMock = true;
-        }
-      } else {
-        usedMock = true;
-      }
-
-      if (usedMock) {
-        const credSeed = new Uint8Array(32);
-        crypto.getRandomValues(credSeed);
-        credIdBytes32 = keccak256(credSeed);
-        pubKeyX = BigInt(address); 
-        pubKeyY = 27n; 
-      }
-
-      triggerToast('Deploying Smart Account', 'Submitting deployWallet call to Passkey Account Factory...');
-
-      const predictedAddress = await publicClient.readContract({
-        address: PASSKEY_ACCOUNT_FACTORY_ADDRESS,
-        abi: PASSKEY_ACCOUNT_FACTORY_ABI,
-        functionName: 'getAddress',
-        args: [credIdBytes32, pubKeyX, pubKeyY]
+        }).catch(err => {
+          closeModal(pinLoadingId);
+          rejectChallenge(err);
+        });
       });
 
-      const hash = await writeContractAsync({
-        address: PASSKEY_ACCOUNT_FACTORY_ADDRESS,
-        abi: PASSKEY_ACCOUNT_FACTORY_ABI,
-        functionName: 'deployWallet',
-        args: [credIdBytes32, pubKeyX, pubKeyY]
+      await pinPromise;
+
+      // PIN created successfully! Now query the newly created wallet
+      triggerToast('PIN Setup Successful', 'Retrieving your new Circle wallet details...');
+      await new Promise(r => setTimeout(r, 2000));
+
+      const queryRes = await fetch('http://localhost:3011/api/ucw/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: address.toLowerCase(), queryOnly: true })
       });
+      const queryData = await queryRes.json();
+      if (!queryRes.ok || !queryData.success || !queryData.wallets || queryData.wallets.length === 0) {
+        throw new Error('Could not retrieve created wallet. Please refresh.');
+      }
 
-      triggerToast('Awaiting Settlement', 'Waiting for on-chain smart account deployment...');
-      await publicClient.waitForTransactionReceipt({ hash });
-
+      const newWallet = queryData.wallets[0];
       const accountInfo = {
-        accountAddress: predictedAddress,
-        credentialId: credIdBytes32,
-        pubKeyX: pubKeyX.toString(),
-        pubKeyY: pubKeyY.toString(),
-        isMock: usedMock
+        accountAddress: newWallet.address,
+        credentialId: newWallet.id,
+        pubKeyX: newWallet.blockchain,
+        pubKeyY: newWallet.state,
+        isMock: false
       };
 
       localStorage.setItem(`nexaflow_passkey_account_${address.toLowerCase()}`, JSON.stringify(accountInfo));
-      setPasskeyAccountAddress(predictedAddress);
-      setPasskeyCredentialId(credIdBytes32);
-      setPasskeyPubKeyX(pubKeyX.toString());
-      setPasskeyPubKeyY(pubKeyY.toString());
+      setPasskeyAccountAddress(newWallet.address);
+      setPasskeyCredentialId(newWallet.id);
+      setPasskeyPubKeyX(newWallet.blockchain);
+      setPasskeyPubKeyY(newWallet.state);
 
-      triggerToast('Biometrics Registered', `Smart account deployed at ${predictedAddress.slice(0, 6)}...${predictedAddress.slice(-4)}`, 'success');
+      triggerToast('Circle Wallet Deployed', `Smart account active at ${newWallet.address.slice(0, 6)}...${newWallet.address.slice(-4)}`, 'success');
       fetchSponsorBalance();
     } catch (err) {
       console.error(err);
-      triggerToast('Passkey Setup Failed', err.message);
+      triggerToast('PIN Setup Failed', err.message || err.toString());
     } finally {
       setIsPasskeyLoading(false);
     }
+  };
+
+  const disconnectPasskey = () => {
+    console.log("disconnectPasskey called, current address:", address);
+    try {
+      if (address) {
+        localStorage.removeItem(`nexaflow_passkey_account_${address.toLowerCase()}`);
+      }
+      // Clear any other stored passkey accounts as a fallback
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('nexaflow_passkey_account_')) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.error("Error clearing localStorage", e);
+    }
+    setPasskeyAccountAddress(null);
+    setPasskeyCredentialId(null);
+    setPasskeyPubKeyX(null);
+    setPasskeyPubKeyY(null);
+    triggerToast('Passkey Disconnected', 'Successfully disconnected and cleared Passkey Smart Wallet info from local storage.', 'success');
   };
 
   // CLAIM GASLESS WITH PASSKEY
@@ -2115,6 +2223,14 @@ export const NexaFlowProvider = ({ children }) => {
     }
   };
 
+  // BENEFITS SPLIT CHANGE HANDLER
+  const handleBenefitsSplitChange = (key, value) => {
+    setBenefitsConfig((prev) => ({
+      ...prev,
+      [key]: Number(value)
+    }));
+  };
+
   // CREATE SALARY STREAM (MANUAL OR DCW AUTOPILOT)
   const handleCreateStream = async (e) => {
     e.preventDefault();
@@ -2194,19 +2310,35 @@ export const NexaFlowProvider = ({ children }) => {
         const selectedRate = pegToFiat ? (fiatMonthlySalary / 2592000) : Number(newEmployeeRate);
         const flowRateRaw = parseUnits(selectedRate.toFixed(6), 6);
         const totalCapRaw = parseUnits(newEmployeeCap.toString(), 6);
-        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+
+        let salt = '0x0000000000000000000000000000000000000000000000000000000000000000';
+        let commitmentHash = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+        if (isPrivateMode) {
+          salt = keccak256(
+            encodeAbiParameters(
+              [{ type: 'string' }, { type: 'uint256' }],
+              [Math.random().toString(), BigInt(Date.now())]
+            )
+          );
+          commitmentHash = keccak256(
+            encodeAbiParameters(
+              [{ type: 'uint256' }, { type: 'uint256' }, { type: 'bytes32' }],
+              [flowRateRaw, totalCapRaw, salt]
+            )
+          );
+        }
+
         await executeContractCall({
           contractAddress: STREAMING_PAYROLL_ADDRESS,
           abi: STREAMING_PAYROLL_ABI,
           functionName: isPrivateMode ? 'createPrivateStream' : 'createStream',
           args: (chosenAddr) => {
-            const streamId = keccak256(
-              encodeAbiParameters(
-                [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }],
-                [chosenAddr, newEmployeeAddress, timestamp]
-              )
-            );
-            return [streamId, newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)];
+            if (isPrivateMode) {
+              return [newEmployeeAddress, commitmentHash, totalCapRaw, getCountryCode(newEmployeeLoc)];
+            } else {
+              return [newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)];
+            }
           },
           actionName: 'Create salary stream',
           successMessage: 'Salary streaming successfully established.',
@@ -2231,20 +2363,35 @@ export const NexaFlowProvider = ({ children }) => {
             }
           },
           onSuccess: async (txHash, walletType, activeAddr) => {
-            const streamId = keccak256(
-              encodeAbiParameters(
-                [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }],
+            const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+            const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
+            const timestamp = BigInt(block.timestamp);
+
+            let streamId;
+            if (isPrivateMode) {
+              const packed = encodePacked(
+                ['address', 'address', 'uint256', 'bytes32'],
+                [activeAddr, newEmployeeAddress, timestamp, commitmentHash]
+              );
+              streamId = keccak256(packed);
+            } else {
+              const packed = encodePacked(
+                ['address', 'address', 'uint256'],
                 [activeAddr, newEmployeeAddress, timestamp]
-              )
-            );
+              );
+              streamId = keccak256(packed);
+            }
 
             if (isPrivateMode) {
               const privateSecrets = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}');
               privateSecrets[streamId] = {
+                salt: salt,
+                flowRate: selectedRate.toString(),
+                totalCap: newEmployeeCap.toString(),
                 name: newEmployeeName || 'Confidential Agent',
                 role: newEmployeeRole || 'Classified Specialist',
                 location: newEmployeeLoc,
-                flowRate: selectedRate
+                employer: activeAddr
               };
               localStorage.setItem('nexaflow_private_stream_secrets', JSON.stringify(privateSecrets));
             }
@@ -2330,7 +2477,8 @@ export const NexaFlowProvider = ({ children }) => {
 
   // SUBMIT MEDICAL BENEFIT CLAIM (AI-VERIFIER INTEGRATED)
   const handleSubmitClaim = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+
     if (!isConnected) {
       triggerToast('Wallet not connected', 'Please connect your wallet.');
       return;
@@ -2350,8 +2498,19 @@ export const NexaFlowProvider = ({ children }) => {
         address: MICRO_BENEFITS_VAULT_ADDRESS,
         abi: MICRO_BENEFITS_VAULT_ABI,
         functionName: 'processClaim',
-        args: [address, address, claimVal, 'HEALTH', dummyFileHash, dummyNonce, dummySig]
+        args: [
+          {
+            member: address,
+            serviceProvider: address,
+            amount: claimVal,
+            claimType: 'HEALTH',
+            claimHash: dummyFileHash,
+            nonce: dummyNonce
+          },
+          dummySig
+        ]
       });
+
 
       triggerToast('Submitting Claim', 'Routing medical bill details to Circle AI Verifier...');
       await publicClient.waitForTransactionReceipt({ hash });
@@ -2400,6 +2559,65 @@ export const NexaFlowProvider = ({ children }) => {
       triggerToast('Security Audit Pass', 'All continuous pay channels cleared successfully.', 'success');
     }, 6000);
   };
+
+  const handleSetSanctionStatus = async (status) => {
+    if (!isConnected && !passkeyAccountAddress) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet or biometric passkey.');
+      return;
+    }
+    if (!complianceTarget || !complianceTarget.startsWith('0x') || complianceTarget.length !== 42) {
+      triggerToast('Invalid Address', 'Please provide a valid recipient address (0x...).');
+      return;
+    }
+    setBlacklistLoading(true);
+    try {
+      await executeContractCall({
+        contractAddress: COMPLIANCE_REGISTRY_ADDRESS,
+        abi: COMPLIANCE_REGISTRY_ABI,
+        functionName: 'setSanctionStatus',
+        args: [complianceTarget, status],
+        actionName: status ? 'Sanction Address' : 'Whitelist Address',
+        successMessage: status ? `Successfully sanctioned target address.` : `Successfully whitelisted target address.`,
+        onSuccess: async () => {
+          setComplianceTarget('');
+        }
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBlacklistLoading(false);
+    }
+  };
+
+  const handleSetGuardianStatus = async (status) => {
+    if (!isConnected && !passkeyAccountAddress) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet or biometric passkey.');
+      return;
+    }
+    if (!guardianTarget || !guardianTarget.startsWith('0x') || guardianTarget.length !== 42) {
+      triggerToast('Invalid Address', 'Please provide a valid guardian address (0x...).');
+      return;
+    }
+    setGuardianLoading(true);
+    try {
+      await executeContractCall({
+        contractAddress: COMPLIANCE_REGISTRY_ADDRESS,
+        abi: COMPLIANCE_REGISTRY_ABI,
+        functionName: 'setGuardianStatus',
+        args: [guardianTarget, status],
+        actionName: status ? 'Promote Guardian' : 'Demote Guardian',
+        successMessage: status ? `Successfully promoted address to Guardian.` : `Successfully demoted address from Guardian.`,
+        onSuccess: async () => {
+          setGuardianTarget('');
+        }
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGuardianLoading(false);
+    }
+  };
+
 
   // eslint-disable-next-line no-unused-vars
   const getTaxRateBps = (loc) => {
@@ -3063,6 +3281,7 @@ export const NexaFlowProvider = ({ children }) => {
       address,
       isConnected,
       disconnect,
+      disconnectPasskey,
       publicClient,
       
       // Token & Contract states
@@ -3210,6 +3429,7 @@ export const NexaFlowProvider = ({ children }) => {
       
       // Safety/Splits & Claims
       benefitsConfig,
+      handleBenefitsSplitChange,
       setBenefitsConfig,
       depositAmount,
       setDepositAmount,
@@ -3234,6 +3454,7 @@ export const NexaFlowProvider = ({ children }) => {
       toastShow,
       toastTitle,
       toastBody,
+      toastTxHash,
       glowTargetId,
       activeContractTab,
       setActiveContractTab,
@@ -3269,6 +3490,7 @@ export const NexaFlowProvider = ({ children }) => {
       // Web3 Handlers
       triggerToast,
       onboardWithPasskey,
+      disconnectPasskey,
       claimGaslessWithPasskey,
       transferFromPasskeyAccount,
       handleDepositSponsor,
@@ -3294,6 +3516,8 @@ export const NexaFlowProvider = ({ children }) => {
       handleProposeRegistry,
       handleSubmitClaim,
       runSecurityScan,
+      handleSetSanctionStatus,
+      handleSetGuardianStatus,
       handleConfirmProposal,
       handleExecuteProposal,
       

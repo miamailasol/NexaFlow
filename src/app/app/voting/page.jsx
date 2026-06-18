@@ -241,7 +241,12 @@ export default function FeatureVotingPage() {
       const res = await fetch(`${AGENT_SERVER_URL}/api/voting/profile/${userAddress}`);
       const data = await res.json();
       if (data.success && data.profile) {
-        setUserProfile(data.profile);
+        setUserProfile({
+          name: data.profile.name || 'Anonymous Contributor',
+          bio: data.profile.bio || 'NexaFlow Beta Tester & Crypto Enthusiast',
+          reputation: data.profile.reputation ?? 15,
+          votedList: data.profile.votedList || {}
+        });
       }
     } catch (err) {
       console.error("Failed to fetch profile from backend:", err);
@@ -387,7 +392,12 @@ export default function FeatureVotingPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setUserProfile(data.profile);
+        setUserProfile({
+          name: data.profile.name || 'Anonymous Contributor',
+          bio: data.profile.bio || 'NexaFlow Beta Tester & Crypto Enthusiast',
+          reputation: data.profile.reputation ?? 15,
+          votedList: data.profile.votedList || {}
+        });
         setIsEditProfileOpen(false);
         triggerToast('Profile Updated', 'Your contributor profile is saved.', 'success');
       }
@@ -398,8 +408,8 @@ export default function FeatureVotingPage() {
   };
 
   const openEditProfile = () => {
-    setEditName(userProfile.name);
-    setEditBio(userProfile.bio);
+    setEditName(userProfile.name || '');
+    setEditBio(userProfile.bio || '');
     setIsEditProfileOpen(true);
   };
 
@@ -612,7 +622,7 @@ export default function FeatureVotingPage() {
                 <input 
                   type="text"
                   placeholder="Search suggestions..."
-                  value={searchQuery}
+                  value={searchQuery || ''}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -663,7 +673,7 @@ export default function FeatureVotingPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <SlidersHorizontal size={12} color="var(--text-muted)" />
                 <select
-                  value={selectedSort}
+                  value={selectedSort || ''}
                   onChange={(e) => setSelectedSort(e.target.value)}
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -1271,7 +1281,7 @@ export default function FeatureVotingPage() {
                 <input 
                   type="text"
                   placeholder={isConnected ? "Add a comment..." : "Connect wallet to comment..."}
-                  value={commentText}
+                  value={commentText || ''}
                   onChange={(e) => setCommentText(e.target.value)}
                   disabled={!isConnected}
                   style={{
@@ -1353,7 +1363,7 @@ export default function FeatureVotingPage() {
                 <input 
                   type="text"
                   placeholder="e.g. Multi-chain deployment to Base"
-                  value={newTitle}
+                  value={newTitle || ''}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="form-input"
                   required
@@ -1364,7 +1374,7 @@ export default function FeatureVotingPage() {
                 <div>
                   <label className="form-label">Category</label>
                   <select
-                    value={newCategory}
+                    value={newCategory || ''}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="form-input"
                     style={{ backgroundColor: '#FFFFFF', color: 'var(--text-main)' }}
@@ -1380,7 +1390,7 @@ export default function FeatureVotingPage() {
                 <div>
                   <label className="form-label">Estimated Impact</label>
                   <select
-                    value={newImpact}
+                    value={newImpact || ''}
                     onChange={(e) => setNewImpact(e.target.value)}
                     className="form-input"
                     style={{ backgroundColor: '#FFFFFF', color: 'var(--text-main)' }}
@@ -1397,7 +1407,7 @@ export default function FeatureVotingPage() {
                 <textarea 
                   rows={4}
                   placeholder="Describe the feature, why the community needs it, and how it improves NexaFlow payroll streaming."
-                  value={newDescription}
+                  value={newDescription || ''}
                   onChange={(e) => setNewDescription(e.target.value)}
                   className="form-input"
                   style={{ resize: 'none' }}
@@ -1474,7 +1484,7 @@ export default function FeatureVotingPage() {
                 <input 
                   type="text"
                   placeholder="e.g. John Doe"
-                  value={editName}
+                  value={editName || ''}
                   onChange={(e) => setEditName(e.target.value)}
                   className="form-input"
                   required
@@ -1486,7 +1496,7 @@ export default function FeatureVotingPage() {
                 <input 
                   type="text"
                   placeholder="e.g. Core Developer, Product Designer"
-                  value={editBio}
+                  value={editBio || ''}
                   onChange={(e) => setEditBio(e.target.value)}
                   className="form-input"
                 />

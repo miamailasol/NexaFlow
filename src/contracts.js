@@ -523,8 +523,37 @@ export const MICRO_BENEFITS_VAULT_ABI = [
     outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    name: 'stakeInCoop',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'shares', type: 'uint256' }],
+    name: 'unstakeInCoop',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'totalCoopShares',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: '', type: 'address' }],
+    name: 'coopShares',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
+
 
 export const YIELD_VAULT_ADDRESS = '0xd8b934580fc4259bbd8a1cdb21bf9c1c71ef4242';
 export const YIELD_VAULT_ABI = [
