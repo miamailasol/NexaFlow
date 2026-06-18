@@ -366,6 +366,28 @@ export const NexaFlowProvider = ({ children }) => {
   // Active Contract Code
   const [activeContractTab, setActiveContractTab] = useState('payroll');
 
+  // Modal Manager States and Helpers
+  const [modalStack, setModalStack] = useState([]);
+
+  const showModal = (modalConfig) => {
+    const id = modalConfig.id || `modal-${Date.now()}-${Math.random()}`;
+    const newModal = { id, ...modalConfig };
+    setModalStack((prev) => [...prev, newModal]);
+    return id;
+  };
+
+  const showLoadingModal = (config) => {
+    return showModal({
+      type: 'loading',
+      dismissible: false,
+      ...config
+    });
+  };
+
+  const closeModal = (id) => {
+    setModalStack((prev) => prev.filter((m) => m.id !== id));
+  };
+
   // Trigger Notification Toast
   const triggerToast = (title, body, targetId = null) => {
     setToastTitle(title);
@@ -3176,6 +3198,12 @@ export const NexaFlowProvider = ({ children }) => {
       glowTargetId,
       activeContractTab,
       setActiveContractTab,
+      
+      // Modal Manager
+      modalStack,
+      showModal,
+      showLoadingModal,
+      closeModal,
       
       // Proposals & Referrals
       proposals,
