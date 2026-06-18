@@ -29,7 +29,9 @@ export default function PasskeysPage() {
     passkeyPubKeyY,
     setPasskeyPubKeyY,
     isPasskeyLoading,
+    isPasskeyMock,
     onboardWithPasskey,
+    disconnectPasskey,
     triggerToast,
     paymasterSponsorBalance,
     sponsorDepositAmount,
@@ -222,9 +224,9 @@ export default function PasskeysPage() {
                   <Fingerprint size={40} color="var(--color-primary)" />
                 </div>
 
-                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>No Biometric Smart Account Found</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>No Circle Smart Wallet Found</h3>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.5' }}>
-                  Register your device's biometric key (FaceID, TouchID, or Windows Hello) to deploy a counterfactual smart contract wallet. This enables gasless, single-tap stream withdrawals.
+                  Register a secure Circle User-Controlled Smart Wallet protected by your own personal PIN. This enables secure, gasless, single-tap stream withdrawals.
                 </p>
 
                 <button
@@ -236,12 +238,12 @@ export default function PasskeysPage() {
                   {isPasskeyLoading ? (
                     <>
                       <RefreshCw className="animate-spin" size={16} />
-                      Onboarding Wallet...
+                      Onboarding Circle Wallet...
                     </>
                   ) : (
                     <>
                       <Zap size={16} />
-                      Onboard with FaceID / TouchID
+                      Onboard with Circle PIN Setup
                     </>
                   )}
                 </button>
@@ -263,7 +265,7 @@ export default function PasskeysPage() {
                   </div>
                   
                   <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '8px' }}>
-                    Biometric Smart Wallet Address
+                    Circle User-Controlled Smart Wallet Address
                   </div>
                   <div style={{ fontSize: '15px', fontFamily: 'var(--font-mono)', color: 'var(--text-main)', fontWeight: '600', marginBottom: '16px', wordBreak: 'break-all', letterSpacing: '0.5px' }}>
                     {passkeyAccountAddress}
@@ -271,10 +273,14 @@ export default function PasskeysPage() {
 
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <span className="badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--color-primary)', border: '1px solid rgba(0, 242, 254, 0.3)' }}>
-                      ERC-4337 Smart Account
+                      Circle SCA Account
                     </span>
-                    <span className="badge" style={{ background: 'rgba(52, 211, 153, 0.15)', color: 'var(--color-success)', border: '1px solid rgba(52, 211, 153, 0.3)' }}>
-                      WebAuthn Active
+                    <span className="badge" style={{ 
+                      background: 'rgba(52, 211, 153, 0.15)', 
+                      color: 'var(--color-success)', 
+                      border: '1px solid rgba(52, 211, 153, 0.3)' 
+                    }}>
+                      Circle PIN Active
                     </span>
                   </div>
                 </div>
@@ -291,7 +297,7 @@ export default function PasskeysPage() {
                 }}>
                   <div>
                     <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '2px' }}>
-                      Biometric Account Balance
+                      Circle UCW Wallet Balance
                     </div>
                     <div style={{ fontSize: '20px', color: 'var(--text-main)', fontWeight: '700', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                       {passkeyUsdcBalance.toFixed(2)}
@@ -302,7 +308,7 @@ export default function PasskeysPage() {
                     className="btn btn-outline btn-sm"
                     onClick={() => {
                       if (refetchPasskeyUsdc) refetchPasskeyUsdc();
-                      triggerToast('Balance Refreshed', 'Successfully synced biometric wallet USDC balance.');
+                      triggerToast('Balance Refreshed', 'Successfully synced Circle User-Controlled Wallet balance.');
                     }}
                     style={{ padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -314,32 +320,25 @@ export default function PasskeysPage() {
                 {/* Metadata Specs */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1.5px solid rgba(255,255,255,0.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Credential ID:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Circle Wallet ID:</span>
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyCredentialId ? `${passkeyCredentialId.slice(0, 10)}...${passkeyCredentialId.slice(-8)}` : 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Public Key X:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyX ? `${passkeyPubKeyX.slice(0, 10)}...${passkeyPubKeyX.slice(-8)}` : 'N/A'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Circle Blockchain:</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyX || 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Public Key Y:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyY ? `${passkeyPubKeyY.slice(0, 10)}...${passkeyPubKeyY.slice(-8)}` : 'N/A'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Circle Wallet State:</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>{passkeyPubKeyY || 'N/A'}</span>
                   </div>
                 </div>
 
                 <button
                   className="btn btn-outline"
-                  onClick={() => {
-                    localStorage.removeItem(`nexaflow_passkey_account_${address.toLowerCase()}`);
-                    setPasskeyAccountAddress(null);
-                    setPasskeyCredentialId(null);
-                    setPasskeyPubKeyX(null);
-                    setPasskeyPubKeyY(null);
-                    triggerToast('Wallet Reset', 'Biometric credential link removed locally.');
-                  }}
+                  onClick={disconnectPasskey}
                   style={{ border: '1.5px solid var(--color-error)', color: 'var(--color-error)', width: '100%', padding: '10px' }}
                 >
-                  Disconnect Biometric Key
+                  Disconnect Circle Wallet
                 </button>
 
               </div>

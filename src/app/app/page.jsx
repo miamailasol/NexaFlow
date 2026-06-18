@@ -195,8 +195,8 @@ export default function DashboardOverview() {
                 <span>Step 2</span>
                 {step2Done ? <CheckCircle size={14} color="var(--color-success)" /> : <span style={{ color: 'var(--text-muted)' }}>Awaiting</span>}
               </div>
-              <div className="onboarding-step-title">Get Demo Funds</div>
-              <div className="onboarding-step-desc">Click "Claim Free Demo Funds" at the bottom of the sidebar to receive test USDC in your wallet.</div>
+              <div className="onboarding-step-title">Obtain or Bridge USDC</div>
+              <div className="onboarding-step-desc">Use the Circle CCTP Portal to bridge USDC from Base Sepolia, or receive test USDC in your connected wallet.</div>
             </div>
 
             <div className={`onboarding-step-card ${step2Done && !step3Done ? 'active' : ''} ${step3Done ? 'completed' : ''}`}>
@@ -518,7 +518,7 @@ export default function DashboardOverview() {
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Status:</span>
                 {dcwAddress ? (
                   <span className="badge badge-success" style={{ fontSize: '11px' }}>
-                    {dcwIsLive ? 'LIVE (CIRCLE INTEGRATED)' : 'DEMO MODE (MOCKED)'}
+                    {dcwIsLive ? 'LIVE (CIRCLE INTEGRATED)' : 'INACTIVE (PROVISION PENDING)'}
                   </span>
                 ) : (
                   <span className="badge badge-warning" style={{ fontSize: '11px' }}>NOT INITIATED</span>

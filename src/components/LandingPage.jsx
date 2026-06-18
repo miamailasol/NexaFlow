@@ -189,6 +189,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
         <nav style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => navigateTo('docs')} style={{ background: 'none', border: 'none', fontStyle: 'normal', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-main)', textTransform: 'uppercase' }} className="hover-underline">Docs</button>
           <button onClick={() => navigateTo('faq')} style={{ background: 'none', border: 'none', fontStyle: 'normal', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-main)', textTransform: 'uppercase' }} className="hover-underline">FAQ</button>
+          <button onClick={() => navigateTo('blog/web3-payroll-streaming-micro-benefits')} style={{ background: 'none', border: 'none', fontStyle: 'normal', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-main)', textTransform: 'uppercase' }} className="hover-underline">Blog</button>
           <button onClick={() => navigateTo('about')} style={{ background: 'none', border: 'none', fontStyle: 'normal', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-main)', textTransform: 'uppercase' }} className="hover-underline">About</button>
           <button onClick={() => navigateTo('contact')} style={{ background: 'none', border: 'none', fontStyle: 'normal', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-main)', textTransform: 'uppercase' }} className="hover-underline">Support</button>
           <button onClick={onLaunchApp} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -217,7 +218,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={onLaunchApp} className="btn btn-primary" style={{ fontSize: '14px', padding: '14px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Launch Demo App</span>
+              <span>Launch NexaFlow App</span>
               <ArrowRight size={16} />
             </button>
             <a href="#waitlist-section" className="btn btn-secondary" style={{ fontSize: '14px', padding: '14px 24px', textDecoration: 'none' }}>
@@ -899,7 +900,7 @@ export default function LandingPage({ onLaunchApp, navigateTo }) {
                 }}
                 style={{ padding: '10px 20px', fontSize: '12px' }}
               >
-                Launch Playground
+                Launch NexaFlow App
               </button>
             </div>
           </div>

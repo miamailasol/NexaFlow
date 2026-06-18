@@ -185,6 +185,7 @@ const initialSuggestions = [
 
 export default function FeatureVotingPage() {
   const { address, isConnected, triggerToast } = useNexaFlow();
+  const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:3012';
   
   // States
   const [activeTab, setActiveTab] = useState('board'); // 'board', 'roadmap'
@@ -215,217 +216,185 @@ export default function FeatureVotingPage() {
   const [editName, setEditName] = useState('');
   const [editBio, setEditBio] = useState('');
 
-  // Initial load from local storage or defaults
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedSuggestions = localStorage.getItem('nexaflow_feature_suggestions');
-      if (savedSuggestions) {
-        try {
-          setSuggestions(JSON.parse(savedSuggestions));
-        } catch (e) {
-          setSuggestions(initialSuggestions);
+  // Load suggestions and profile from API
+  const fetchSuggestions = async () => {
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/suggestions`);
+      const data = await res.json();
+      if (data.success && data.suggestions) {
+        setSuggestions(data.suggestions);
+        // Also sync expanded suggestion if open
+        if (expandedSuggestion) {
+          const updated = data.suggestions.find(s => s.id === expandedSuggestion.id);
+          if (updated) setExpandedSuggestion(updated);
         }
-      } else {
-        setSuggestions(initialSuggestions);
-        localStorage.setItem('nexaflow_feature_suggestions', JSON.stringify(initialSuggestions));
       }
-
-      const savedProfile = localStorage.getItem(`nexaflow_user_profile_${address?.toLowerCase() || 'guest'}`);
-      if (savedProfile) {
-        try {
-          setUserProfile(JSON.parse(savedProfile));
-        } catch (e) {}
-      } else if (address) {
-        const defaultProf = {
-          name: `Contributor ${address.slice(0, 6)}...${address.slice(-4)}`,
-          bio: 'NexaFlow Web3 Contributor',
-          reputation: 10,
-          votedList: {}
-        };
-        setUserProfile(defaultProf);
-        localStorage.setItem(`nexaflow_user_profile_${address.toLowerCase()}`, JSON.stringify(defaultProf));
-      }
+    } catch (err) {
+      console.error("Failed to fetch suggestions from backend:", err);
+      // Fallback
+      setSuggestions(initialSuggestions);
     }
-  }, [address]);
-
-  // Sync profile when address changes
-  useEffect(() => {
-    if (address) {
-      const saved = localStorage.getItem(`nexaflow_user_profile_${address.toLowerCase()}`);
-      if (saved) {
-        setUserProfile(JSON.parse(saved));
-      } else {
-        const defaultProf = {
-          name: `Contributor ${address.slice(0, 6)}...${address.slice(-4)}`,
-          bio: 'NexaFlow Web3 Contributor',
-          reputation: 10,
-          votedList: {}
-        };
-        setUserProfile(defaultProf);
-        localStorage.setItem(`nexaflow_user_profile_${address.toLowerCase()}`, JSON.stringify(defaultProf));
-      }
-    }
-  }, [address]);
-
-  // Save suggestions to local storage helper
-  const saveSuggestions = (updated) => {
-    setSuggestions(updated);
-    localStorage.setItem('nexaflow_feature_suggestions', JSON.stringify(updated));
   };
 
+  const fetchProfile = async (userAddress) => {
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/profile/${userAddress}`);
+      const data = await res.json();
+      if (data.success && data.profile) {
+        setUserProfile(data.profile);
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile from backend:", err);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    fetchSuggestions();
+    if (address) {
+      fetchProfile(address);
+    }
+  }, [address]);
+
   // Upvote/Downvote actions
-  const handleVote = (id, type) => {
-    if (!isConnected) {
+  const handleVote = async (id, type) => {
+    if (!isConnected || !address) {
       triggerToast('Wallet Disconnected', 'Please connect your Web3 wallet to vote.');
       return;
     }
 
-    const userId = address.toLowerCase();
-    const updated = suggestions.map(s => {
-      if (s.id !== id) return s;
-
-      const currentVote = s.votedUsers?.[userId] || null;
-      let newVotedUsers = { ...(s.votedUsers || {}) };
-      let upvotes = s.upvotes || 0;
-      let downvotes = s.downvotes || 0;
-
-      if (currentVote === type) {
-        // Remove vote
-        if (type === 'up') upvotes = Math.max(0, upvotes - 1);
-        else downvotes = Math.max(0, downvotes - 1);
-        delete newVotedUsers[userId];
-        triggerToast('Vote Removed', 'Your vote has been cancelled.');
-      } else {
-        // Change or add vote
-        if (currentVote === 'up') upvotes = Math.max(0, upvotes - 1);
-        if (currentVote === 'down') downvotes = Math.max(0, downvotes - 1);
-
-        if (type === 'up') {
-          upvotes += 1;
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, voterAddress: address, voteType: type })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.message.includes("removed")) {
+          triggerToast('Vote Removed', 'Your vote has been cancelled.');
+        } else if (type === 'up') {
           triggerToast('Feature Upvoted', 'Thank you for your feedback!', 'success');
         } else {
-          downvotes += 1;
           triggerToast('Feature Downvoted', 'Feedback recorded.');
         }
-
-        newVotedUsers[userId] = type;
+        await fetchSuggestions();
+        await fetchProfile(address);
       }
-
-      // Recalculate reputation
-      updateReputation(5);
-
-      return {
-        ...s,
-        upvotes,
-        downvotes,
-        votedUsers: newVotedUsers
-      };
-    });
-
-    saveSuggestions(updated);
-  };
-
-  const updateReputation = (val) => {
-    if (!address) return;
-    const updatedProf = {
-      ...userProfile,
-      reputation: (userProfile.reputation || 0) + val
-    };
-    setUserProfile(updatedProf);
-    localStorage.setItem(`nexaflow_user_profile_${address.toLowerCase()}`, JSON.stringify(updatedProf));
+    } catch (err) {
+      console.error("Failed to submit vote:", err);
+      triggerToast('Error', 'Failed to communicate with voting server.');
+    }
   };
 
   // Submit suggestion
-  const handleSubmitSuggestion = (e) => {
+  const handleSubmitSuggestion = async (e) => {
     e.preventDefault();
     if (!newTitle.trim() || !newDescription.trim()) {
       triggerToast('Validation Error', 'Please fill in all required fields.');
       return;
     }
 
-    const newSuggest = {
-      id: `suggest-${Date.now()}`,
-      title: newTitle.trim(),
-      description: newDescription.trim(),
-      category: newCategory,
-      status: 'Planned',
-      impact: newImpact,
-      upvotes: 1,
-      downvotes: 0,
-      submitterAddress: address || '0xAnonymous',
-      submitterName: userProfile.name || 'Anonymous',
-      date: 'Just now',
-      comments: [],
-      votedUsers: address ? { [address.toLowerCase()]: 'up' } : {}
-    };
+    if (!isConnected || !address) {
+      triggerToast('Wallet Disconnected', 'Connect your wallet to submit ideas.');
+      return;
+    }
 
-    const updated = [newSuggest, ...suggestions];
-    saveSuggestions(updated);
-    setIsSuggestModalOpen(false);
-    
-    // Reset Form
-    setNewTitle('');
-    setNewDescription('');
-    setNewCategory('Payroll');
-    setNewImpact('Medium');
-
-    updateReputation(15); // Bonus rep for submitting a suggestion
-    triggerToast('Suggestion Submitted', 'Your suggestion is now live for community voting!', 'success');
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newTitle.trim(),
+          description: newDescription.trim(),
+          category: newCategory,
+          impact: newImpact,
+          submitterAddress: address,
+          submitterName: userProfile.name || 'Anonymous'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSuggestModalOpen(false);
+        setNewTitle('');
+        setNewDescription('');
+        setNewCategory('Payroll');
+        setNewImpact('Medium');
+        
+        await fetchSuggestions();
+        await fetchProfile(address);
+        triggerToast('Suggestion Submitted', 'Your suggestion is now live for community voting!', 'success');
+      }
+    } catch (err) {
+      console.error("Failed to submit suggestion:", err);
+      triggerToast('Error', 'Failed to submit proposal to server.');
+    }
   };
 
   // Submit comment
-  const handleAddComment = (e) => {
+  const handleAddComment = async (e) => {
     e.preventDefault();
     if (!commentText.trim()) return;
 
-    if (!isConnected) {
+    if (!isConnected || !address) {
       triggerToast('Wallet Disconnected', 'Connect your wallet to leave a comment.');
       return;
     }
 
-    const newComment = {
-      id: `c-${Date.now()}`,
-      authorName: userProfile.name,
-      authorAddress: address,
-      content: commentText.trim(),
-      timestamp: 'Just now'
-    };
-
-    const updated = suggestions.map(s => {
-      if (s.id !== expandedSuggestion.id) return s;
-      return {
-        ...s,
-        comments: [...(s.comments || []), newComment]
-      };
-    });
-
-    saveSuggestions(updated);
-    
-    // Update active expanded view state
-    const currentExpanded = updated.find(s => s.id === expandedSuggestion.id);
-    setExpandedSuggestion(currentExpanded);
-    
-    setCommentText('');
-    updateReputation(2); // reputation bump
-    triggerToast('Comment Added', 'Your comment was posted successfully.', 'success');
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: expandedSuggestion.id,
+          authorName: userProfile.name || 'Anonymous',
+          authorAddress: address,
+          content: commentText.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.proposal) {
+        setExpandedSuggestion(data.proposal);
+        setCommentText('');
+        await fetchSuggestions();
+        await fetchProfile(address);
+        triggerToast('Comment Added', 'Your comment was posted successfully.', 'success');
+      }
+    } catch (err) {
+      console.error("Failed to submit comment:", err);
+      triggerToast('Error', 'Failed to add comment on server.');
+    }
   };
 
   // Edit Profile
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (!editName.trim()) return;
 
-    const updatedProf = {
-      ...userProfile,
-      name: editName.trim(),
-      bio: editBio.trim()
-    };
-    setUserProfile(updatedProf);
-    if (address) {
-      localStorage.setItem(`nexaflow_user_profile_${address.toLowerCase()}`, JSON.stringify(updatedProf));
+    if (!isConnected || !address) {
+      triggerToast('Wallet Disconnected', 'Connect your wallet to update profile.');
+      return;
     }
-    setIsEditProfileOpen(false);
-    triggerToast('Profile Updated', 'Your contributor profile is saved.', 'success');
+
+    try {
+      const res = await fetch(`${AGENT_SERVER_URL}/api/voting/profile/${address}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim(),
+          bio: editBio.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUserProfile(data.profile);
+        setIsEditProfileOpen(false);
+        triggerToast('Profile Updated', 'Your contributor profile is saved.', 'success');
+      }
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      triggerToast('Error', 'Failed to save profile update to server.');
+    }
   };
 
   const openEditProfile = () => {
@@ -462,15 +431,26 @@ export default function FeatureVotingPage() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Planned':
-        return <span className="badge" style={{ backgroundColor: 'rgba(147, 51, 234, 0.15)', color: '#C084FC', border: '1px solid rgba(147, 51, 234, 0.3)' }}>🔮 Planned</span>;
+        return <span className="badge" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>🔮 Planned</span>;
       case 'In Progress':
-        return <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#FBBF24', border: '1px solid rgba(245, 158, 11, 0.3)' }}>⚙️ In Progress</span>;
+        return <span className="badge" style={{ backgroundColor: 'var(--color-warning)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>⚙️ In Progress</span>;
       case 'Completed':
-        return <span className="badge" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34D399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>✅ Completed</span>;
+        return <span className="badge" style={{ backgroundColor: 'var(--color-success)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>✅ Completed</span>;
       case 'Rejected':
-        return <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#F87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>❌ Rejected</span>;
+        return <span className="badge" style={{ backgroundColor: 'var(--color-error)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>❌ Rejected</span>;
       default:
         return null;
+    }
+  };
+
+  const getCategoryBadgeColor = (cat) => {
+    switch (cat) {
+      case 'Payroll': return 'var(--color-success)';
+      case 'Smart Wallet': return 'var(--color-primary)';
+      case 'Staking': return 'var(--color-secondary)';
+      case 'Security': return 'var(--color-warning)';
+      case 'Agents': return '#B5F9FF';
+      default: return '#E2DBFC';
     }
   };
 
@@ -478,9 +458,9 @@ export default function FeatureVotingPage() {
     <div style={{ paddingBottom: '80px' }}>
       {/* Header Panel */}
       <div className="dashboard-header-panel" style={{
-        background: 'linear-gradient(135deg, rgba(17, 12, 34, 0.95) 0%, rgba(9, 6, 21, 0.95) 100%)',
-        border: 'var(--thin-border)',
-        boxShadow: 'var(--neo-shadow-primary)',
+        background: 'var(--bg-sidebar)',
+        border: 'var(--thick-border)',
+        boxShadow: 'var(--shadow-flat)',
         borderRadius: '12px',
         padding: '24px',
         marginBottom: '24px',
@@ -496,34 +476,36 @@ export default function FeatureVotingPage() {
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Community-Led Development</span>
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', margin: 0 }}>Product Board & Feedback Portal</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0' }}>
+          <p style={{ color: '#A1A1AA', fontSize: '13px', margin: '4px 0 0' }}>
             Vote on upcoming features, request enhancements, and track our engineering progress live on the Arc Chain.
           </p>
         </div>
 
         {/* User Stats Card */}
         <div style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '8px',
+          backgroundColor: '#FFFDF0',
+          border: 'var(--medium-border)',
+          borderRadius: '12px',
           padding: '12px 18px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          gap: '12px',
+          boxShadow: 'var(--shadow-flat-sm)'
         }}>
           <div style={{
             width: '40px',
             height: '40px',
             borderRadius: '50%',
-            backgroundColor: 'var(--color-primary-dark)',
-            border: '2px solid var(--color-primary)',
+            backgroundColor: 'var(--color-primary)',
+            border: 'var(--thin-border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 'bold',
+            color: 'var(--text-main)',
+            fontWeight: '900',
             fontSize: '14px',
-            position: 'relative'
+            position: 'relative',
+            boxShadow: '2.5px 2.5px 0px #1A1A1A'
           }}>
             {userProfile.name.slice(0, 2).toUpperCase()}
             <div style={{
@@ -534,27 +516,27 @@ export default function FeatureVotingPage() {
               width: '10px',
               height: '10px',
               borderRadius: '50%',
-              border: '2px solid #000'
+              border: '1.5px solid #1A1A1A'
             }} />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#fff' }}>{userProfile.name}</span>
+              <span style={{ fontWeight: '800', fontSize: '13px', color: 'var(--text-main)', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>{userProfile.name}</span>
               <button 
                 onClick={openEditProfile}
-                style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0 }}
+                style={{ background: 'none', border: 'none', color: 'var(--color-primary-dark)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
                 title="Edit Contributor Profile"
               >
-                <Edit2 size={12} />
+                <Edit2 size={12} strokeWidth={2.5} />
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Trophy size={11} color="#fbbf24" />
+                <Trophy size={11} color="#fbbf24" fill="#fbbf24" />
                 Rep: {userProfile.reputation}
               </span>
               <span>•</span>
-              <span style={{ fontFamily: 'monospace' }}>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>
                 {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Guest Mode'}
               </span>
             </div>
@@ -563,23 +545,25 @@ export default function FeatureVotingPage() {
       </div>
 
       {/* Tabs Menu */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: 'var(--thin-border)', paddingBottom: '16px' }}>
         <button 
           onClick={() => setActiveTab('board')}
           className={`tab-btn ${activeTab === 'board' ? 'active' : ''}`}
           style={{
-            background: activeTab === 'board' ? 'rgba(167, 139, 250, 0.1)' : 'transparent',
-            border: activeTab === 'board' ? '1px solid var(--color-primary)' : '1px solid transparent',
-            color: activeTab === 'board' ? '#fff' : 'var(--text-muted)',
-            padding: '8px 16px',
+            background: activeTab === 'board' ? 'var(--color-primary)' : '#FFFFFF',
+            border: 'var(--thin-border)',
+            color: 'var(--text-main)',
+            padding: '10px 18px',
             borderRadius: '6px',
-            fontWeight: 'bold',
+            fontWeight: '800',
             fontSize: '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            transition: 'all 0.2s'
+            transition: 'all 0.1s ease',
+            boxShadow: '3px 3px 0px #1A1A1A',
+            transform: activeTab === 'board' ? 'translateY(-1px)' : 'none'
           }}
         >
           <TrendingUp size={16} />
@@ -589,18 +573,20 @@ export default function FeatureVotingPage() {
           onClick={() => setActiveTab('roadmap')}
           className={`tab-btn ${activeTab === 'roadmap' ? 'active' : ''}`}
           style={{
-            background: activeTab === 'roadmap' ? 'rgba(167, 139, 250, 0.1)' : 'transparent',
-            border: activeTab === 'roadmap' ? '1px solid var(--color-primary)' : '1px solid transparent',
-            color: activeTab === 'roadmap' ? '#fff' : 'var(--text-muted)',
-            padding: '8px 16px',
+            background: activeTab === 'roadmap' ? 'var(--color-primary)' : '#FFFFFF',
+            border: 'var(--thin-border)',
+            color: 'var(--text-main)',
+            padding: '10px 18px',
             borderRadius: '6px',
-            fontWeight: 'bold',
+            fontWeight: '800',
             fontSize: '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            transition: 'all 0.2s'
+            transition: 'all 0.1s ease',
+            boxShadow: '3px 3px 0px #1A1A1A',
+            transform: activeTab === 'roadmap' ? 'translateY(-1px)' : 'none'
           }}
         >
           <FolderSync size={16} />
@@ -622,64 +608,74 @@ export default function FeatureVotingPage() {
           }}>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ position: 'relative' }}>
-                <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '12px' }} />
                 <input 
                   type="text"
                   placeholder="Search suggestions..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
-                    backgroundColor: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: '#FFFFFF',
+                    border: 'var(--thin-border)',
                     borderRadius: '6px',
-                    padding: '6px 12px 6px 30px',
+                    padding: '8px 12px 8px 32px',
                     fontSize: '12px',
-                    color: '#fff',
+                    color: 'var(--text-main)',
                     outline: 'none',
-                    minWidth: '200px'
+                    minWidth: '220px',
+                    boxShadow: '2px 2px 0px #1A1A1A',
+                    fontWeight: '600'
                   }}
                 />
               </div>
 
               {/* Category selector capsules */}
-              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '2px 0' }}>
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '12px',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      border: selectedCategory === cat ? '1px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.06)',
-                      backgroundColor: selectedCategory === cat ? 'rgba(167, 139, 250, 0.15)' : 'rgba(255,255,255,0.02)',
-                      color: selectedCategory === cat ? '#fff' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    {cat}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '4px 0' }}>
+                {categories.map(cat => {
+                  const isActive = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        border: 'var(--thin-border)',
+                        backgroundColor: isActive ? 'var(--color-primary)' : '#FFFFFF',
+                        color: 'var(--text-main)',
+                        cursor: 'pointer',
+                        transition: 'all 0.1s ease',
+                        boxShadow: '2px 2px 0px #1A1A1A',
+                        transform: isActive ? 'translateY(-1px)' : 'none'
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Sorting & Submit suggestion CTA */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <SlidersHorizontal size={12} color="var(--text-muted)" />
                 <select
                   value={selectedSort}
                   onChange={(e) => setSelectedSort(e.target.value)}
                   style={{
-                    backgroundColor: '#0c071d',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: '#FFFFFF',
+                    border: 'var(--thin-border)',
                     borderRadius: '6px',
-                    color: '#fff',
+                    color: 'var(--text-main)',
                     fontSize: '12px',
-                    padding: '4px 8px',
-                    outline: 'none'
+                    padding: '6px 10px',
+                    outline: 'none',
+                    boxShadow: '2px 2px 0px #1A1A1A',
+                    fontWeight: '800',
+                    cursor: 'pointer'
                   }}
                 >
                   <option value="votes">Sort by votes</option>
@@ -728,15 +724,16 @@ export default function FeatureVotingPage() {
                   <div 
                     key={item.id}
                     style={{
-                      backgroundColor: 'rgba(17, 12, 34, 0.4)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: '8px',
-                      padding: '16px 20px',
+                      backgroundColor: '#FFFFFF',
+                      border: 'var(--medium-border)',
+                      borderRadius: '12px',
+                      padding: '16px 20px 16px 28px',
                       display: 'flex',
                       gap: '16px',
                       transition: 'all 0.2s',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      boxShadow: 'var(--shadow-flat-sm)',
                     }}
                     className="suggestion-item"
                   >
@@ -746,11 +743,12 @@ export default function FeatureVotingPage() {
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      width: '4px',
+                      width: '8px',
+                      borderRight: 'var(--thin-border)',
                       backgroundColor: 
                         item.status === 'Completed' ? 'var(--color-success)' :
-                        item.status === 'In Progress' ? '#fbbf24' :
-                        item.status === 'Rejected' ? '#f87171' : 'var(--color-primary)'
+                        item.status === 'In Progress' ? 'var(--color-warning)' :
+                        item.status === 'Rejected' ? 'var(--color-error)' : 'var(--color-primary)'
                     }} />
 
                     {/* Voting Column widget */}
@@ -760,8 +758,8 @@ export default function FeatureVotingPage() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       minWidth: '50px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.01)',
-                      borderRight: '1px solid rgba(255,255,255,0.04)',
+                      backgroundColor: 'transparent',
+                      borderRight: 'var(--thin-border)',
                       paddingRight: '16px'
                     }}>
                       <button 
@@ -770,7 +768,7 @@ export default function FeatureVotingPage() {
                           background: 'none',
                           border: 'none',
                           cursor: 'pointer',
-                          color: userVote === 'up' ? 'var(--color-success)' : 'var(--text-muted)',
+                          color: userVote === 'up' ? '#10B981' : 'var(--text-muted)',
                           padding: '4px',
                           display: 'flex',
                           alignItems: 'center',
@@ -782,10 +780,11 @@ export default function FeatureVotingPage() {
                         <ChevronUp size={20} strokeWidth={userVote === 'up' ? 3 : 2} />
                       </button>
                       <span style={{ 
-                        fontSize: '14px', 
-                        fontWeight: '800', 
-                        color: userVote === 'up' ? 'var(--color-success)' : userVote === 'down' ? '#f87171' : '#fff', 
-                        margin: '2px 0' 
+                        fontSize: '16px', 
+                        fontWeight: '900', 
+                        color: userVote === 'up' ? '#10B981' : userVote === 'down' ? '#EF4444' : 'var(--text-main)', 
+                        margin: '2px 0',
+                        fontFamily: 'var(--font-mono)'
                       }}>
                         {(item.upvotes || 0) - (item.downvotes || 0)}
                       </span>
@@ -795,7 +794,7 @@ export default function FeatureVotingPage() {
                           background: 'none',
                           border: 'none',
                           cursor: 'pointer',
-                          color: userVote === 'down' ? '#f87171' : 'var(--text-muted)',
+                          color: userVote === 'down' ? '#EF4444' : 'var(--text-muted)',
                           padding: '4px',
                           display: 'flex',
                           alignItems: 'center',
@@ -810,14 +809,16 @@ export default function FeatureVotingPage() {
 
                     {/* Main Request details */}
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <span className="badge" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                        <span className="badge" style={{ backgroundColor: getCategoryBadgeColor(item.category), color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>
                           {item.category}
                         </span>
                         {getStatusBadge(item.status)}
                         <span className="badge" style={{ 
-                          backgroundColor: item.impact === 'High' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.02)', 
-                          color: item.impact === 'High' ? '#f87171' : 'var(--text-muted)',
+                          backgroundColor: item.impact === 'High' ? 'var(--color-error)' : item.impact === 'Medium' ? 'var(--color-warning)' : '#E2E8F0', 
+                          color: 'var(--text-main)',
+                          border: 'var(--thin-border)',
+                          boxShadow: '1.5px 1.5px 0px #1A1A1A',
                           fontSize: '10px'
                         }}>
                           Impact: {item.impact}
@@ -827,30 +828,32 @@ export default function FeatureVotingPage() {
                       <h3 
                         onClick={() => setExpandedSuggestion(item)}
                         style={{ 
-                          fontSize: '15px', 
-                          fontWeight: 'bold', 
-                          color: '#fff', 
+                          fontSize: '18px', 
+                          fontWeight: '800', 
+                          color: 'var(--text-main)', 
                           margin: '0 0 6px', 
                           cursor: 'pointer',
-                          transition: 'color 0.2s'
+                          transition: 'color 0.2s',
+                          fontFamily: 'var(--font-display)',
+                          textTransform: 'uppercase'
                         }}
                         className="hover-underline"
                       >
                         {item.title}
                       </h3>
                       
-                      <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '0 0 12px', lineHeight: '1.4' }}>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '0 0 12px', lineHeight: '1.5', fontWeight: '500' }}>
                         {item.description}
                       </p>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
                             <User size={10} />
                             Suggested by {item.submitterName}
                           </span>
                           <span>•</span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
                             <Clock size={10} />
                             {item.date}
                           </span>
@@ -860,18 +863,19 @@ export default function FeatureVotingPage() {
                         <button 
                           onClick={() => setExpandedSuggestion(item)}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--color-primary)',
+                            backgroundColor: '#FFFFFF',
+                            border: 'var(--thin-border)',
+                            color: 'var(--text-main)',
                             fontSize: '12px',
-                            fontWeight: 'bold',
+                            fontWeight: '800',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(167, 139, 250, 0.05)'
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            boxShadow: '2px 2px 0px #1A1A1A',
+                            transition: 'all 0.1s ease'
                           }}
                         >
                           <MessageSquare size={12} />
@@ -898,16 +902,17 @@ export default function FeatureVotingPage() {
         }}>
           {/* COLUMN: PLANNED */}
           <div style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.01)',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '16px'
+            backgroundColor: '#FFFFFF',
+            border: 'var(--medium-border)',
+            borderRadius: '12px',
+            padding: '18px 16px',
+            boxShadow: 'var(--shadow-flat-sm)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 <span style={{ color: '#C084FC' }}>🔮</span> Planned
               </h3>
-              <span className="badge" style={{ backgroundColor: 'rgba(147, 51, 234, 0.1)', color: '#C084FC' }}>
+              <span className="badge" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A', fontWeight: '900' }}>
                 {plannedItems.length}
               </span>
             </div>
@@ -917,45 +922,47 @@ export default function FeatureVotingPage() {
                 <div 
                   key={item.id} 
                   style={{
-                    backgroundColor: '#110c22',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: '6px',
-                    padding: '12px'
+                    backgroundColor: '#FFFDF0',
+                    border: 'var(--thin-border)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--color-primary)' }}>{item.category}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>👍 {item.upvotes}</span>
+                    <span style={{ fontSize: '9px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{item.category}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 'bold' }}>👍 {item.upvotes}</span>
                   </div>
                   <h4 
                     onClick={() => setExpandedSuggestion(item)}
-                    style={{ fontSize: '12px', fontWeight: 'bold', color: '#fff', margin: '0 0 6px', cursor: 'pointer' }}
+                    style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 6px', cursor: 'pointer', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}
                   >
                     {item.title}
                   </h4>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3', fontWeight: '500' }}>
                     {item.description}
                   </p>
                 </div>
               ))}
               {plannedItems.length === 0 && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No features planned.</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontWeight: '600' }}>No features planned.</div>
               )}
             </div>
           </div>
 
           {/* COLUMN: IN PROGRESS */}
           <div style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.01)',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '16px'
+            backgroundColor: '#FFFFFF',
+            border: 'var(--medium-border)',
+            borderRadius: '12px',
+            padding: '18px 16px',
+            boxShadow: 'var(--shadow-flat-sm)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 <span style={{ color: '#FBBF24' }}>⚙️</span> In Progress
               </h3>
-              <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#FBBF24' }}>
+              <span className="badge" style={{ backgroundColor: 'var(--color-warning)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A', fontWeight: '900' }}>
                 {inProgressItems.length}
               </span>
             </div>
@@ -965,45 +972,47 @@ export default function FeatureVotingPage() {
                 <div 
                   key={item.id} 
                   style={{
-                    backgroundColor: '#110c22',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: '6px',
-                    padding: '12px'
+                    backgroundColor: '#FFFDF0',
+                    border: 'var(--thin-border)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--color-primary)' }}>{item.category}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>👍 {item.upvotes}</span>
+                    <span style={{ fontSize: '9px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{item.category}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 'bold' }}>👍 {item.upvotes}</span>
                   </div>
                   <h4 
                     onClick={() => setExpandedSuggestion(item)}
-                    style={{ fontSize: '12px', fontWeight: 'bold', color: '#fff', margin: '0 0 6px', cursor: 'pointer' }}
+                    style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 6px', cursor: 'pointer', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}
                   >
                     {item.title}
                   </h4>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3', fontWeight: '500' }}>
                     {item.description}
                   </p>
                 </div>
               ))}
               {inProgressItems.length === 0 && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No features in progress.</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontWeight: '600' }}>No features in progress.</div>
               )}
             </div>
           </div>
 
           {/* COLUMN: COMPLETED */}
           <div style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.01)',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '16px'
+            backgroundColor: '#FFFFFF',
+            border: 'var(--medium-border)',
+            borderRadius: '12px',
+            padding: '18px 16px',
+            boxShadow: 'var(--shadow-flat-sm)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 <span style={{ color: 'var(--color-success)' }}>✅</span> Completed
               </h3>
-              <span className="badge" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)' }}>
+              <span className="badge" style={{ backgroundColor: 'var(--color-success)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A', fontWeight: '900' }}>
                 {completedItems.length}
               </span>
             </div>
@@ -1013,45 +1022,47 @@ export default function FeatureVotingPage() {
                 <div 
                   key={item.id} 
                   style={{
-                    backgroundColor: '#110c22',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: '6px',
-                    padding: '12px'
+                    backgroundColor: '#FFFDF0',
+                    border: 'var(--thin-border)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--color-primary)' }}>{item.category}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>👍 {item.upvotes}</span>
+                    <span style={{ fontSize: '9px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{item.category}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 'bold' }}>👍 {item.upvotes}</span>
                   </div>
                   <h4 
                     onClick={() => setExpandedSuggestion(item)}
-                    style={{ fontSize: '12px', fontWeight: 'bold', color: '#fff', margin: '0 0 6px', cursor: 'pointer' }}
+                    style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 6px', cursor: 'pointer', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}
                   >
                     {item.title}
                   </h4>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3', fontWeight: '500' }}>
                     {item.description}
                   </p>
                 </div>
               ))}
               {completedItems.length === 0 && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No features completed yet.</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontWeight: '600' }}>No features completed yet.</div>
               )}
             </div>
           </div>
 
           {/* COLUMN: REJECTED */}
           <div style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.01)',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '16px'
+            backgroundColor: '#FFFFFF',
+            border: 'var(--medium-border)',
+            borderRadius: '12px',
+            padding: '18px 16px',
+            boxShadow: 'var(--shadow-flat-sm)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 <span style={{ color: '#F87171' }}>❌</span> Rejected
               </h3>
-              <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#F87171' }}>
+              <span className="badge" style={{ backgroundColor: 'var(--color-error)', color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A', fontWeight: '900' }}>
                 {rejectedItems.length}
               </span>
             </div>
@@ -1061,29 +1072,30 @@ export default function FeatureVotingPage() {
                 <div 
                   key={item.id} 
                   style={{
-                    backgroundColor: '#110c22',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: '6px',
-                    padding: '12px'
+                    backgroundColor: '#FFFDF0',
+                    border: 'var(--thin-border)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--color-primary)' }}>{item.category}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>👍 {item.upvotes}</span>
+                    <span style={{ fontSize: '9px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{item.category}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 'bold' }}>👍 {item.upvotes}</span>
                   </div>
                   <h4 
                     onClick={() => setExpandedSuggestion(item)}
-                    style={{ fontSize: '12px', fontWeight: 'bold', color: '#fff', margin: '0 0 6px', cursor: 'pointer' }}
+                    style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 6px', cursor: 'pointer', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}
                   >
                     {item.title}
                   </h4>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3', fontWeight: '500' }}>
                     {item.description}
                   </p>
                 </div>
               ))}
               {rejectedItems.length === 0 && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No rejected features.</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontWeight: '600' }}>No rejected features.</div>
               )}
             </div>
           </div>
@@ -1098,7 +1110,8 @@ export default function FeatureVotingPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backgroundColor: 'rgba(26, 26, 36, 0.7)',
+          backdropFilter: 'blur(4px)',
           display: 'flex',
           justifyContent: 'flex-end',
           zIndex: 999
@@ -1106,14 +1119,15 @@ export default function FeatureVotingPage() {
           <div style={{
             width: '100%',
             maxWidth: '550px',
-            backgroundColor: '#110c22',
+            backgroundColor: '#FFFFFF',
             height: '100%',
-            borderLeft: '2px solid var(--color-primary)',
+            borderLeft: 'var(--thick-border)',
             padding: '30px',
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            overflowY: 'auto'
+            overflowY: 'auto',
+            boxShadow: '-10px 0px 0px rgba(0,0,0,0.15)'
           }}>
             <button 
               onClick={() => setExpandedSuggestion(null)}
@@ -1121,12 +1135,16 @@ export default function FeatureVotingPage() {
                 position: 'absolute',
                 top: '20px',
                 right: '20px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: '#FFFFFF',
+                border: 'var(--thin-border)',
                 borderRadius: '6px',
-                color: '#fff',
+                color: 'var(--text-main)',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '6px',
+                boxShadow: '2px 2px 0px #1A1A1A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
               <X size={16} />
@@ -1135,18 +1153,24 @@ export default function FeatureVotingPage() {
             {/* Header info */}
             <div style={{ marginTop: '16px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
-                <span className="badge" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#fff' }}>
+                <span className="badge" style={{ backgroundColor: getCategoryBadgeColor(expandedSuggestion.category), color: 'var(--text-main)', border: 'var(--thin-border)', boxShadow: '1.5px 1.5px 0px #1A1A1A' }}>
                   {expandedSuggestion.category}
                 </span>
                 {getStatusBadge(expandedSuggestion.status)}
-                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', fontSize: '10px' }}>
+                <span className="badge" style={{ 
+                  backgroundColor: expandedSuggestion.impact === 'High' ? 'var(--color-error)' : expandedSuggestion.impact === 'Medium' ? 'var(--color-warning)' : '#E2E8F0', 
+                  color: 'var(--text-main)', 
+                  border: 'var(--thin-border)',
+                  boxShadow: '1.5px 1.5px 0px #1A1A1A',
+                  fontSize: '10px' 
+                }}>
                   Impact: {expandedSuggestion.impact}
                 </span>
               </div>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', margin: '0 0 10px', lineHeight: '1.4' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 10px', lineHeight: '1.4', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 {expandedSuggestion.title}
               </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5', margin: 0, fontWeight: '500' }}>
                 {expandedSuggestion.description}
               </p>
             </div>
@@ -1156,28 +1180,30 @@ export default function FeatureVotingPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              backgroundColor: 'rgba(255,255,255,0.02)',
-              borderRadius: '6px',
+              backgroundColor: '#FFFDF0',
+              borderRadius: '8px',
               padding: '12px 16px',
               marginBottom: '24px',
-              border: '1px solid rgba(255,255,255,0.05)'
+              border: 'var(--thin-border)',
+              boxShadow: '2px 2px 0px #1A1A1A'
             }}>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Community Feedback</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: '800', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>Community Feedback</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <button 
                   onClick={() => handleVote(expandedSuggestion.id, 'up')}
                   style={{
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.2)',
+                    backgroundColor: 'var(--color-success)',
+                    border: 'var(--thin-border)',
                     borderRadius: '6px',
                     padding: '6px 12px',
-                    color: '#34D399',
+                    color: 'var(--text-main)',
                     fontSize: '12px',
-                    fontWeight: 'bold',
+                    fontWeight: '800',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '6px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <ThumbsUp size={12} />
@@ -1186,17 +1212,18 @@ export default function FeatureVotingPage() {
                 <button 
                   onClick={() => handleVote(expandedSuggestion.id, 'down')}
                   style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    backgroundColor: 'var(--color-error)',
+                    border: 'var(--thin-border)',
                     borderRadius: '6px',
                     padding: '6px 12px',
-                    color: '#F87171',
+                    color: 'var(--text-main)',
                     fontSize: '12px',
-                    fontWeight: 'bold',
+                    fontWeight: '800',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '6px',
+                    boxShadow: '2px 2px 0px #1A1A1A'
                   }}
                 >
                   <ThumbsDown size={12} />
@@ -1207,14 +1234,14 @@ export default function FeatureVotingPage() {
 
             {/* Comments List Section */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
                 <MessageSquare size={14} color="var(--color-primary)" />
                 Comments ({expandedSuggestion.comments?.length || 0})
               </h3>
               
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', padding: '4px' }}>
                 {expandedSuggestion.comments?.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0', fontWeight: '600' }}>
                     No comments yet. Join the discussion below!
                   </div>
                 ) : (
@@ -1222,24 +1249,25 @@ export default function FeatureVotingPage() {
                     <div 
                       key={c.id} 
                       style={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        borderRadius: '6px',
-                        padding: '10px 14px'
+                        backgroundColor: '#FFFDF0',
+                        border: 'var(--thin-border)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        boxShadow: '2px 2px 0px #1A1A1A'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#fff' }}>{c.authorName}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '600' }}>
+                        <span style={{ fontWeight: '800', color: 'var(--text-main)' }}>{c.authorName}</span>
                         <span>{c.timestamp}</span>
                       </div>
-                      <p style={{ margin: 0, fontSize: '12px', color: '#D1D5DB', lineHeight: '1.4' }}>{c.content}</p>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.4', fontWeight: '500' }}>{c.content}</p>
                     </div>
                   ))
                 )}
               </div>
 
               {/* Add Comment Form */}
-              <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '8px' }}>
+              <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '10px', padding: '4px' }}>
                 <input 
                   type="text"
                   placeholder={isConnected ? "Add a comment..." : "Connect wallet to comment..."}
@@ -1248,20 +1276,22 @@ export default function FeatureVotingPage() {
                   disabled={!isConnected}
                   style={{
                     flex: 1,
-                    backgroundColor: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: '#FFFFFF',
+                    border: 'var(--thin-border)',
                     borderRadius: '6px',
                     padding: '8px 12px',
                     fontSize: '12px',
-                    color: '#fff',
-                    outline: 'none'
+                    color: 'var(--text-main)',
+                    outline: 'none',
+                    boxShadow: '2px 2px 0px #1A1A1A',
+                    fontWeight: '600'
                   }}
                 />
                 <button 
                   type="submit" 
                   className="btn btn-primary"
                   disabled={!isConnected || !commentText.trim()}
-                  style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 'bold' }}
+                  style={{ padding: '8px 16px', fontSize: '12px', fontWeight: '800', boxShadow: '2px 2px 0px #1A1A1A' }}
                 >
                   Post
                 </button>
@@ -1279,7 +1309,8 @@ export default function FeatureVotingPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backgroundColor: 'rgba(26, 26, 36, 0.7)',
+          backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1287,13 +1318,13 @@ export default function FeatureVotingPage() {
           padding: '20px'
         }}>
           <div className="modal-card" style={{
-            backgroundColor: '#110c22',
-            border: '2px solid var(--color-primary)',
-            boxShadow: '4px 4px 0px 0px var(--color-primary)',
-            borderRadius: '8px',
+            backgroundColor: '#FFFFFF',
+            border: 'var(--thick-border)',
+            boxShadow: 'var(--shadow-flat)',
+            borderRadius: '12px',
             width: '100%',
             maxWidth: '500px',
-            padding: '24px',
+            padding: '28px',
             position: 'relative'
           }}>
             <button 
@@ -1304,14 +1335,14 @@ export default function FeatureVotingPage() {
                 right: '16px',
                 background: 'none',
                 border: 'none',
-                color: 'var(--text-muted)',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >
               <X size={20} />
             </button>
 
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
               <Plus size={20} color="var(--color-primary)" />
               Suggest a New Feature
             </h3>
@@ -1336,7 +1367,7 @@ export default function FeatureVotingPage() {
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="form-input"
-                    style={{ backgroundColor: '#090515', color: '#fff' }}
+                    style={{ backgroundColor: '#FFFFFF', color: 'var(--text-main)' }}
                   >
                     <option value="Payroll">Payroll</option>
                     <option value="Smart Wallet">Smart Wallet</option>
@@ -1352,7 +1383,7 @@ export default function FeatureVotingPage() {
                     value={newImpact}
                     onChange={(e) => setNewImpact(e.target.value)}
                     className="form-input"
-                    style={{ backgroundColor: '#090515', color: '#fff' }}
+                    style={{ backgroundColor: '#FFFFFF', color: 'var(--text-main)' }}
                   >
                     <option value="Low">Low Impact</option>
                     <option value="Medium">Medium Impact</option>
@@ -1378,9 +1409,10 @@ export default function FeatureVotingPage() {
                 type="submit" 
                 className="btn btn-primary"
                 style={{
-                  padding: '10px',
-                  fontWeight: 'bold',
-                  marginTop: '8px'
+                  padding: '12px',
+                  fontWeight: '800',
+                  marginTop: '8px',
+                  boxShadow: 'var(--shadow-flat-sm)'
                 }}
               >
                 Submit Feature Proposal
@@ -1398,7 +1430,8 @@ export default function FeatureVotingPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backgroundColor: 'rgba(26, 26, 36, 0.7)',
+          backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1406,13 +1439,13 @@ export default function FeatureVotingPage() {
           padding: '20px'
         }}>
           <div className="modal-card" style={{
-            backgroundColor: '#110c22',
-            border: '2px solid var(--color-primary)',
-            boxShadow: '4px 4px 0px 0px var(--color-primary)',
-            borderRadius: '8px',
+            backgroundColor: '#FFFFFF',
+            border: 'var(--thick-border)',
+            boxShadow: 'var(--shadow-flat)',
+            borderRadius: '12px',
             width: '100%',
             maxWidth: '450px',
-            padding: '24px',
+            padding: '28px',
             position: 'relative'
           }}>
             <button 
@@ -1423,14 +1456,14 @@ export default function FeatureVotingPage() {
                 right: '16px',
                 background: 'none',
                 border: 'none',
-                color: 'var(--text-muted)',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >
               <X size={20} />
             </button>
 
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
               <UserCheck size={20} color="var(--color-primary)" />
               Contributor Profile Settings
             </h3>
@@ -1463,9 +1496,10 @@ export default function FeatureVotingPage() {
                 type="submit" 
                 className="btn btn-primary"
                 style={{
-                  padding: '10px',
-                  fontWeight: 'bold',
-                  marginTop: '8px'
+                  padding: '12px',
+                  fontWeight: '800',
+                  marginTop: '8px',
+                  boxShadow: 'var(--shadow-flat-sm)'
                 }}
               >
                 Save Settings

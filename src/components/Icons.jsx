@@ -39,12 +39,12 @@ export const ArcTestnetIcon = ({ size = 20, className = '', style = {} }) => (
     <defs>
       <linearGradient id="paint0_linear_1_2" x1="24" x2="24" y1="0" y2="48" gradientUnits="userSpaceOnUse">
         <stop stopColor="#000B24"></stop>
-        <stop offset="0.743" stop-color="#052950"></stop>
-        <stop offset="1" stop-color="#416D91"></stop>
+        <stop offset="0.743" stopColor="#052950"></stop>
+        <stop offset="1" stopColor="#416D91"></stop>
       </linearGradient>
       <linearGradient id="paint1_linear_1_2" x1="23.994" x2="46.193" y1="8.4" y2="54.921" gradientUnits="userSpaceOnUse">
         <stop stopColor="#fff"></stop>
-        <stop offset="1" stop-color="#fff" stopOpacity="0"></stop>
+        <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
       </linearGradient>
       <clipPath id="clip0_1_2">
         <path fill="#fff" d="M0 0h48v48H0z"></path>

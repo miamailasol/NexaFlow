@@ -8,6 +8,7 @@ export default async function sitemap() {
     '/contact',
     '/docs',
     '/faq',
+    '/blog/web3-payroll-streaming-micro-benefits',
     '/legal/compliance',
     '/legal/privacy',
     '/legal/terms',
@@ -15,7 +16,7 @@ export default async function sitemap() {
     url: `${baseUrl}${route}`,
     lastModified: new Date().toISOString().split('T')[0],
     changeFrequency: route === '' ? 'daily' : 'weekly',
-    priority: route === '' ? 1.0 : route.startsWith('/docs') ? 0.9 : 0.7,
+    priority: route === '' ? 1.0 : route.startsWith('/docs') || route.startsWith('/blog') ? 0.9 : 0.7,
   }));
 
   return routes;
