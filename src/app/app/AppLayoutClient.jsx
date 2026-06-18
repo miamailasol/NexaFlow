@@ -128,14 +128,14 @@ export default function AppLayoutClient({ children }) {
                 </div>
                 <div className="modal-title-text">
                   <h3>Circle CCTP Bridge</h3>
-                  <span>Step {bridgeStep} of 5</span>
+                  <span>Step {bridgeStep} of 3</span>
                 </div>
               </div>
 
               {/* Progress Steps Header */}
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(5, 1fr)', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
                 gap: '6px', 
                 margin: '16px 0 8px',
                 backgroundColor: '#F4F4F9',
