@@ -367,6 +367,15 @@ export const NexaFlowProvider = ({ children }) => {
   // Active Contract Code
   const [activeContractTab, setActiveContractTab] = useState('payroll');
 
+  const attestationIntervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!isBridgeModalOpen && attestationIntervalRef.current) {
+      clearInterval(attestationIntervalRef.current);
+      attestationIntervalRef.current = null;
+    }
+  }, [isBridgeModalOpen]);
+
   // Modal Manager States and Helpers
   const [modalStack, setModalStack] = useState([]);
 
@@ -1623,6 +1632,9 @@ export const NexaFlowProvider = ({ children }) => {
   };
 
   const pollCircleAttestation = async (messageHash, messageBytes) => {
+    if (attestationIntervalRef.current) {
+      clearInterval(attestationIntervalRef.current);
+    }
     const url = `https://iris-api-sandbox.circle.com/attestations/${messageHash}`;
     let attempts = 0;
     const interval = setInterval(async () => {
@@ -1634,6 +1646,7 @@ export const NexaFlowProvider = ({ children }) => {
           const data = await res.json();
           if (data.status === 'complete' && data.attestation) {
             clearInterval(interval);
+            attestationIntervalRef.current = null;
             setBridgeAttestation(data.attestation);
             triggerToast('Attestation Received', 'Circle CCTP attestation signed successfully.');
             // Automatically switch network and claim
@@ -1646,13 +1659,19 @@ export const NexaFlowProvider = ({ children }) => {
 
       if (attempts >= 90) {
         clearInterval(interval);
+        attestationIntervalRef.current = null;
         setBridgeStatusText("CCTP attestation polling timed out. You can use simulated attestation (mock skip) to continue.");
         setIsBridgingInProgress(false);
       }
     }, 2000);
+    attestationIntervalRef.current = interval;
   };
 
   const handleMockAttestation = async () => {
+    if (attestationIntervalRef.current) {
+      clearInterval(attestationIntervalRef.current);
+      attestationIntervalRef.current = null;
+    }
     const dummySignature = '0x' + Array(130).fill('f').join('');
     setBridgeAttestation(dummySignature);
     triggerToast('Simulated Attestation', 'Bypassed testnet delay with mock signature for demo.');
