@@ -1,7 +1,7 @@
 # NexaFlow — Autonomous Continuous Payroll & Decentralized Micro-Benefits Ledger
 
-### **Award-Winning Web3 Payroll and Micro-Insurance Stack on Arc Testnet**
 *Built with Circle Programmable Wallets, x402 Nanopayments, and LangGraph-powered Autonomous AI Agents.*
+
 
 ---
 
