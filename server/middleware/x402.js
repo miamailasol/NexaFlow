@@ -17,13 +17,10 @@
 
 import { keccak256, toHex } from "viem";
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
+import { getX402Ledger, addX402Record, getX402Balance, setX402Balance, depositX402 } from "../database.js";
 
 // ─── Circle Nanopayments Client ──────────────────────────────────────
 const facilitator = new BatchFacilitatorClient();
-
-// ─── Nanopayment Ledger (in-memory cache for dashboard visualization) ──
-const paymentLedger = [];
-const balances = new Map(); // Keep as fallback/cache
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
@@ -52,9 +49,8 @@ function buildPaymentRequirements(priceUsdc, sellerAddress) {
 /**
  * Record a deposit event in the in-memory ledger
  */
-export function depositNanopaymentBalance(buyerAddress, amountUsdc) {
-  const current = balances.get(buyerAddress.toLowerCase()) || 0;
-  balances.set(buyerAddress.toLowerCase(), current + amountUsdc);
+export async function depositNanopaymentBalance(buyerAddress, amountUsdc) {
+  await depositX402(buyerAddress, amountUsdc);
   
   const entry = {
     type: "DEPOSIT",
@@ -62,15 +58,16 @@ export function depositNanopaymentBalance(buyerAddress, amountUsdc) {
     amount: amountUsdc,
     timestamp: new Date().toISOString(),
   };
-  paymentLedger.push(entry);
+  await addX402Record(entry);
   return entry;
 }
 
 /**
  * Get the nanopayment ledger (for UI display)
  */
-export function getNanopaymentLedger() {
-  return paymentLedger.slice(-100); // Last 100 transactions
+export async function getNanopaymentLedger() {
+  const ledger = await getX402Ledger();
+  return ledger.slice(-100); // Last 100 transactions
 }
 
 /**
@@ -88,7 +85,7 @@ export async function getNanopaymentBalance(buyerAddress) {
     });
     if (!response.ok) {
       // Fallback to in-memory balance if API fails
-      return balances.get(buyerAddress.toLowerCase()) || 0;
+      return await getX402Balance(buyerAddress);
     }
     const data = await response.json();
     const bal = data.balances?.find(b => b.domain === 26);
@@ -96,27 +93,28 @@ export async function getNanopaymentBalance(buyerAddress) {
     const balance = raw.includes(".") ? parseFloat(raw) : parseFloat(raw) / 1000000;
     
     // Sync cache
-    balances.set(buyerAddress.toLowerCase(), balance);
+    await setX402Balance(buyerAddress, balance);
     return balance;
   } catch (err) {
     console.error("Failed to fetch gateway balance for address:", buyerAddress, err);
-    return balances.get(buyerAddress.toLowerCase()) || 0;
+    return await getX402Balance(buyerAddress);
   }
 }
 
 /**
  * Get total nanopayment stats
  */
-export function getNanopaymentStats() {
-  const totalPayments = paymentLedger.filter((p) => p.type === "PAYMENT").length;
-  const totalVolume = paymentLedger
+export async function getNanopaymentStats() {
+  const ledger = await getX402Ledger();
+  const totalPayments = ledger.filter((p) => p.type === "PAYMENT").length;
+  const totalVolume = ledger
     .filter((p) => p.type === "PAYMENT")
     .reduce((sum, p) => sum + p.amount, 0);
-  const totalDeposits = paymentLedger
+  const totalDeposits = ledger
     .filter((p) => p.type === "DEPOSIT")
     .reduce((sum, p) => sum + p.amount, 0);
   const uniqueBuyers = new Set(
-    paymentLedger.filter((p) => p.type === "PAYMENT").map((p) => p.buyer)
+    ledger.filter((p) => p.type === "PAYMENT").map((p) => p.buyer)
   ).size;
 
   return {
@@ -125,7 +123,7 @@ export function getNanopaymentStats() {
     totalDepositsUsdc: totalDeposits,
     uniqueBuyers,
     averagePaymentUsdc: totalPayments > 0 ? totalVolume / totalPayments : 0,
-    ledgerSize: paymentLedger.length,
+    ledgerSize: ledger.length,
   };
 }
 
@@ -229,7 +227,7 @@ export function x402PaymentRequired({
         timestamp: new Date().toISOString(),
         settled: true,
       };
-      paymentLedger.push(paymentRecord);
+      await addX402Record(paymentRecord);
 
       // Attach payment info to request
       req.x402Payment = paymentRecord;

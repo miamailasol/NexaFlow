@@ -302,6 +302,310 @@ app.post('/api/treasury/transfer-dcw', async (req, res) => {
   }
 });
 
+// ─── Circle User-Controlled Wallets (UCW) Endpoints ──────────────────
+import crypto from 'crypto';
+
+let resolvedCircleBaseUrl = 'https://api.circle.com';
+
+const detectCircleBaseUrl = async () => {
+  const apiKey = process.env.CIRCLE_API_KEY;
+  if (!apiKey) return;
+
+  try {
+    // Try sandbox first
+    const res = await fetch('https://api-sandbox.circle.com/v1/w3s/config/entity', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (res.status === 200 || res.status === 400) {
+      resolvedCircleBaseUrl = 'https://api-sandbox.circle.com';
+      console.log('Circle environment auto-detected: SANDBOX (https://api-sandbox.circle.com)');
+      return;
+    }
+  } catch (e) {}
+
+  try {
+    // Try production / testnet
+    const res = await fetch('https://api.circle.com/v1/w3s/config/entity', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (res.status === 200 || res.status === 400) {
+      resolvedCircleBaseUrl = 'https://api.circle.com';
+      console.log('Circle environment auto-detected: PRODUCTION/TESTNET (https://api.circle.com)');
+      return;
+    }
+  } catch (e) {}
+
+  console.log('Using default Circle environment: PRODUCTION (https://api.circle.com)');
+};
+
+// Auto-detect environment on module load
+await detectCircleBaseUrl();
+
+app.post('/api/ucw/session', async (req, res) => {
+  const { userId, queryOnly = false } = req.body;
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'Missing userId parameter' });
+  }
+
+  const API_KEY = process.env.CIRCLE_API_KEY;
+  const baseUrl = resolvedCircleBaseUrl;
+  const appId = process.env.CIRCLE_APP_ID || 'mock-app-id-9988-7766';
+  const circleServiceUrl = baseUrl.includes('sandbox') ? 'https://pw-auth-sandbox.circle.com' : 'https://pw-auth.circle.com';
+
+  try {
+    // 1. Try to register user
+    console.log(`Registering Circle UCW user: ${userId}`);
+    try {
+      await fetch(`${baseUrl}/v1/w3s/users`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      });
+    } catch (regErr) {
+      console.log('User registration call finished (may already exist).');
+    }
+
+    // 2. Generate user token & encryption key
+    console.log(`Generating user session token for: ${userId}`);
+    const tokenRes = await fetch(`${baseUrl}/v1/w3s/users/token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ userId })
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      throw new Error(tokenData?.message || 'Failed to generate user token');
+    }
+    const { userToken, encryptionKey } = tokenData.data;
+
+    // 3. Fetch existing wallets
+    console.log(`Fetching wallets for: ${userId}`);
+    const walletsRes = await fetch(`${baseUrl}/v1/w3s/wallets`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-User-Token': userToken
+      }
+    });
+    const walletsData = await walletsRes.json();
+    const wallets = walletsData?.data?.wallets || [];
+
+    if (wallets.length > 0) {
+      return res.json({
+        success: true,
+        status: 'ACTIVE',
+        wallets,
+        userToken,
+        encryptionKey,
+        appId,
+        circleServiceUrl
+      });
+    }
+
+    // If we only wanted to query status (e.g., during client-side polling)
+    if (queryOnly) {
+      return res.json({
+        success: true,
+        status: 'INITIALIZING',
+        wallets: [],
+        userToken,
+        encryptionKey,
+        appId,
+        circleServiceUrl
+      });
+    }
+
+    // 4. Request initialization (Create PIN & Wallet)
+    console.log(`Initializing user for first-time wallet setup: ${userId}`);
+    const initRes = await fetch(`${baseUrl}/v1/w3s/user/initialize`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-User-Token': userToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        blockchains: ['ETH-SEPOLIA'],
+        accountType: 'SCA'
+      })
+    });
+    const initData = await initRes.json();
+
+    if (initRes.ok) {
+      return res.json({
+        success: true,
+        status: 'INITIALIZING',
+        challengeId: initData.data.challengeId,
+        userToken,
+        encryptionKey,
+        appId,
+        circleServiceUrl
+      });
+    }
+
+    // Handle "User Already Initialized" error
+    const isAlreadyInitialized = initData?.code === 155106 || 
+      (initData?.message && initData.message.toLowerCase().includes('already initialized'));
+
+    if (isAlreadyInitialized) {
+      console.log(`User already initialized. Requesting direct wallet creation challenge...`);
+      const walletRes = await fetch(`${baseUrl}/v1/w3s/user/wallets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'X-User-Token': userToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          blockchains: ['ETH-SEPOLIA'],
+          accountType: 'SCA'
+        })
+      });
+      const walletData = await walletRes.json();
+      if (!walletRes.ok) {
+        throw new Error(walletData?.message || 'Failed to create wallet challenge');
+      }
+      return res.json({
+        success: true,
+        status: 'INITIALIZING',
+        challengeId: walletData.data.challengeId,
+        userToken,
+        encryptionKey,
+        appId,
+        circleServiceUrl
+      });
+    }
+
+    throw new Error(initData?.message || 'Failed to initialize session');
+
+  } catch (err) {
+    console.error('UCW Session error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ucw/transfer', async (req, res) => {
+  const { userId, walletId, destinationAddress, amount } = req.body;
+  if (!userId || !walletId || !destinationAddress || !amount) {
+    return res.status(400).json({ success: false, error: 'Missing required parameters' });
+  }
+
+  const API_KEY = process.env.CIRCLE_API_KEY;
+  const baseUrl = resolvedCircleBaseUrl;
+  const circleServiceUrl = baseUrl.includes('sandbox') ? 'https://pw-auth-sandbox.circle.com' : 'https://pw-auth.circle.com';
+
+  try {
+    const tokenRes = await fetch(`${baseUrl}/v1/w3s/users/token`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      throw new Error(tokenData?.message || 'Failed to generate user token');
+    }
+    const { userToken, encryptionKey } = tokenData.data;
+
+    const txRes = await fetch(`${baseUrl}/v1/w3s/user/transactions/transfer`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-User-Token': userToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        userId,
+        walletId,
+        destinationAddress,
+        amounts: [amount.toString()],
+        tokenId: 'USD-COIN-SEPOLIA',
+        feeLevel: 'MEDIUM'
+      })
+    });
+    const txData = await txRes.json();
+    if (!txRes.ok) {
+      throw new Error(txData?.message || 'Failed to create transfer challenge');
+    }
+
+    res.json({
+      success: true,
+      challengeId: txData.data.challengeId,
+      userToken,
+      encryptionKey,
+      circleServiceUrl
+    });
+  } catch (err) {
+    console.error('UCW Transfer error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ucw/contract-execution', async (req, res) => {
+  const { userId, walletId, contractAddress, abiFunctionSignature, abiParameters } = req.body;
+  if (!userId || !walletId || !contractAddress || !abiFunctionSignature) {
+    return res.status(400).json({ success: false, error: 'Missing required parameters' });
+  }
+
+  const API_KEY = process.env.CIRCLE_API_KEY;
+  const baseUrl = resolvedCircleBaseUrl;
+  const circleServiceUrl = baseUrl.includes('sandbox') ? 'https://pw-auth-sandbox.circle.com' : 'https://pw-auth.circle.com';
+
+  try {
+    const tokenRes = await fetch(`${baseUrl}/v1/w3s/users/token`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      throw new Error(tokenData?.message || 'Failed to generate user token');
+    }
+    const { userToken, encryptionKey } = tokenData.data;
+
+    const txRes = await fetch(`${baseUrl}/v1/w3s/user/transactions/contractExecution`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-User-Token': userToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        userId,
+        walletId,
+        contractAddress,
+        abiFunctionSignature,
+        abiParameters: abiParameters || [],
+        feeLevel: 'MEDIUM'
+      })
+    });
+    const txData = await txRes.json();
+    if (!txRes.ok) {
+      throw new Error(txData?.message || 'Failed to create contract execution challenge');
+    }
+
+    res.json({
+      success: true,
+      challengeId: txData.data.challengeId,
+      userToken,
+      encryptionKey,
+      circleServiceUrl
+    });
+  } catch (err) {
+    console.error('UCW Contract Execution error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`NexaFlow Treasury DCW backend service running at http://localhost:${PORT}`);
+  console.log(`NexaFlow Treasury DCW/UCW backend service running at http://localhost:${PORT}`);
 });

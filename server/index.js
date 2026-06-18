@@ -25,6 +25,14 @@ import {
 } from "./agents/coordinator.js";
 
 import { getAgentBudget } from "./agents/tools.js";
+import {
+  getSuggestions,
+  addSuggestion,
+  voteSuggestion,
+  addComment,
+  getProfile,
+  saveProfile
+} from "./database.js";
 
 import {
   x402PaymentRequired,
@@ -62,7 +70,7 @@ const publicClient = createPublicClient({
 /**
  * Health check + system status
  */
-app.get("/api/status", (req, res) => {
+app.get("/api/status", async (req, res) => {
   res.json({
     service: "NexaFlow Agent Server",
     version: "2.0.0",
@@ -74,7 +82,7 @@ app.get("/api/status", (req, res) => {
       compliance: { status: "active", budget: getAgentBudget("compliance") },
       settlement: { status: "active", budget: getAgentBudget("settlement") },
     },
-    nanopayments: getNanopaymentStats(),
+    nanopayments: await getNanopaymentStats(),
     uptime: process.uptime(),
     arc: {
       network: "Arc Testnet",
@@ -97,9 +105,9 @@ app.get("/api/status", (req, res) => {
 /**
  * Get real-time agent activity log
  */
-app.get("/api/agents/activity", (req, res) => {
+app.get("/api/agents/activity", async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
-  const log = getAgentActivityLog();
+  const log = await getAgentActivityLog();
   res.json({
     success: true,
     total: log.length,
@@ -134,11 +142,11 @@ app.get("/api/agents/budgets", (req, res) => {
 /**
  * Get nanopayment ledger
  */
-app.get("/api/nanopayments/ledger", (req, res) => {
+app.get("/api/nanopayments/ledger", async (req, res) => {
   res.json({
     success: true,
-    stats: getNanopaymentStats(),
-    ledger: getNanopaymentLedger(),
+    stats: await getNanopaymentStats(),
+    ledger: await getNanopaymentLedger(),
   });
 });
 
@@ -165,7 +173,7 @@ app.post("/api/nanopayments/deposit", async (req, res) => {
     });
   }
 
-  const result = depositNanopaymentBalance(buyerAddress, amountUsdc);
+  const result = await depositNanopaymentBalance(buyerAddress, amountUsdc);
   const newBalance = await getNanopaymentBalance(buyerAddress);
 
   res.json({
@@ -302,15 +310,17 @@ app.get(
         }
       );
 
+      const activityLog = await getAgentActivityLog();
+
       const report = {
         generatedAt: new Date().toISOString(),
         network: "Arc Testnet (Chain ID: 5042002)",
         gasToken: "USDC",
         agentBudgetUtilization: agentBudgets,
-        nanopaymentMetrics: getNanopaymentStats(),
+        nanopaymentMetrics: await getNanopaymentStats(),
         activitySummary: {
-          totalAgentActions: getAgentActivityLog().length,
-          recentActions: getAgentActivityLog().slice(-10),
+          totalAgentActions: activityLog.length,
+          recentActions: activityLog.slice(-10),
         },
         contracts: {
           StreamingPayroll: "0xE366FC3cd96AFbDE41B0Fd8a3096178FaC2d1cDF",
@@ -370,7 +380,7 @@ app.post("/api/agent/process-claim", async (req, res) => {
       success: false,
       error: error.message,
       hint: "Ensure OPENAI_API_KEY is set in .env for real AI agent inference",
-      activityLog: getAgentActivityLog().slice(-10),
+      activityLog: (await getAgentActivityLog()).slice(-10),
     });
   }
 });
@@ -392,7 +402,7 @@ app.post("/api/demo/process-claim", async (req, res) => {
       success: false,
       error: error.message,
       hint: "Ensure OPENAI_API_KEY is set in .env for real AI agent inference",
-      activityLog: getAgentActivityLog().slice(-10),
+      activityLog: (await getAgentActivityLog()).slice(-10),
     });
   }
 });
@@ -403,7 +413,7 @@ app.post("/api/demo/process-claim", async (req, res) => {
 app.post("/api/demo/seed", async (req, res) => {
   try {
     const defaultAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-    depositNanopaymentBalance(defaultAddress, 10.0);
+    await depositNanopaymentBalance(defaultAddress, 10.0);
     res.json({
       success: true,
       message: `Demo state seeded successfully with $10.00 USDC for ${defaultAddress}`,
@@ -535,6 +545,103 @@ app.post(
     }
   }
 );
+
+
+// ═════════════════════════════════════════════════════════════════════
+// DAO GOVERNANCE & VOTING ENDPOINTS
+// ═════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/voting/suggestions
+ */
+app.get("/api/voting/suggestions", async (req, res) => {
+  res.json({
+    success: true,
+    suggestions: await getSuggestions()
+  });
+});
+
+/**
+ * POST /api/voting/suggest
+ */
+app.post("/api/voting/suggest", async (req, res) => {
+  const { title, description, category, impact, submitterAddress, submitterName } = req.body;
+  if (!title || !description || !submitterAddress) {
+    return res.status(400).json({ error: "Missing required fields: title, description, submitterAddress" });
+  }
+
+  const suggestion = {
+    id: `suggest-${Date.now()}`,
+    title,
+    description,
+    category: category || "General",
+    status: "Planned",
+    impact: impact || "Medium",
+    upvotes: 1,
+    downvotes: 0,
+    submitterAddress,
+    submitterName: submitterName || "Anonymous",
+    date: "Just now",
+    comments: [],
+    votedUsers: {
+      [submitterAddress.toLowerCase()]: "up"
+    }
+  };
+
+  await addSuggestion(suggestion);
+  res.json({ success: true, suggestion });
+});
+
+/**
+ * POST /api/voting/vote
+ */
+app.post("/api/voting/vote", async (req, res) => {
+  const { id, voterAddress, voteType } = req.body;
+  if (!id || !voterAddress || !voteType) {
+    return res.status(400).json({ error: "Missing required fields: id, voterAddress, voteType" });
+  }
+
+  const result = await voteSuggestion(id, voterAddress, voteType);
+  res.json(result);
+});
+
+/**
+ * POST /api/voting/comment
+ */
+app.post("/api/voting/comment", async (req, res) => {
+  const { id, authorName, authorAddress, content } = req.body;
+  if (!id || !authorName || !authorAddress || !content) {
+    return res.status(400).json({ error: "Missing required fields: id, authorName, authorAddress, content" });
+  }
+
+  const comment = {
+    id: `c-${Date.now()}`,
+    authorName,
+    authorAddress,
+    content,
+    timestamp: "Just now"
+  };
+
+  const updatedProposal = await addComment(id, comment);
+  res.json({ success: true, proposal: updatedProposal });
+});
+
+/**
+ * GET /api/voting/profile/:address
+ */
+app.get("/api/voting/profile/:address", async (req, res) => {
+  const profile = await getProfile(req.params.address);
+  res.json({ success: true, profile });
+});
+
+/**
+ * POST /api/voting/profile/:address
+ */
+app.post("/api/voting/profile/:address", async (req, res) => {
+  const { name, bio } = req.body;
+  const profile = await saveProfile(req.params.address, { name, bio });
+  res.json({ success: true, profile });
+});
 
 
 // ═════════════════════════════════════════════════════════════════════

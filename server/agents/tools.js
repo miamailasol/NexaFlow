@@ -46,6 +46,19 @@ if (PRIVATE_KEY) {
   console.warn("   Set PRIVATE_KEY in .env for real on-chain transactions.");
 }
 
+// ─── Transaction Mutex Lock (Resolves Nonce Congestion) ──────────────
+let txLock = Promise.resolve();
+
+async function executeSequentialTx(writeFunc) {
+  const run = () => new Promise((resolve, reject) => {
+    writeFunc().then(resolve).catch(reject);
+  });
+  
+  const result = txLock.then(run);
+  txLock = result.then(() => {}).catch(() => {});
+  return result;
+}
+
 // ─── Contract Addresses (deployed on Arc Testnet) ───────────────────
 const CONTRACTS = {
   USDC: "0x3600000000000000000000000000000000000000",
@@ -348,12 +361,12 @@ export const executePaymentTool = tool(
       // Real on-chain: execute USDC ERC-20 transfer on Arc Testnet
       const amountRaw = parseUnits(amountUsdc.toString(), 6);
 
-      const txHash = await walletClient.writeContract({
+      const txHash = await executeSequentialTx(() => walletClient.writeContract({
         address: CONTRACTS.USDC,
         abi: USDC_ABI,
         functionName: "transfer",
         args: [recipientAddress, amountRaw],
-      });
+      }));
 
       // Wait for transaction receipt to confirm
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -412,12 +425,12 @@ export const createStreamTool = tool(
       const durationDays = (durationSeconds / 86400).toFixed(2);
 
       // Real on-chain: call StreamingPayroll.createStream()
-      const txHash = await walletClient.writeContract({
+      const txHash = await executeSequentialTx(() => walletClient.writeContract({
         address: CONTRACTS.STREAMING_PAYROLL,
         abi: STREAMING_PAYROLL_ABI,
         functionName: "createStream",
         args: [employeeAddress, flowRateRaw, totalCapRaw, "GLOBAL"],
-      });
+      }));
 
       // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -521,12 +534,12 @@ export const registerAgentTool = tool(
       const uri = metadataUri || `ipfs://nexaflow-agent-${agentName.toLowerCase()}-v1`;
 
       // Real on-chain: call IdentityRegistry.register(metadataURI)
-      const txHash = await walletClient.writeContract({
+      const txHash = await executeSequentialTx(() => walletClient.writeContract({
         address: CONTRACTS.IDENTITY_REGISTRY,
         abi: IDENTITY_REGISTRY_ABI,
         functionName: "register",
         args: [uri],
-      });
+      }));
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
@@ -578,12 +591,12 @@ export const recordReputationTool = tool(
       const feedbackHash = keccak256(toHex(tag));
 
       // Real on-chain: call ReputationRegistry.giveFeedback()
-      const txHash = await walletClient.writeContract({
+      const txHash = await executeSequentialTx(() => walletClient.writeContract({
         address: CONTRACTS.REPUTATION_REGISTRY,
         abi: REPUTATION_REGISTRY_ABI,
         functionName: "giveFeedback",
         args: [BigInt(agentTokenId), score, feedbackHash],
-      });
+      }));
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
@@ -625,12 +638,12 @@ export const createJobTool = tool(
       const expiredAt = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour expiry
 
       // Real on-chain: call AgenticCommerce.createJob()
-      const txHash = await walletClient.writeContract({
+      const txHash = await executeSequentialTx(() => walletClient.writeContract({
         address: CONTRACTS.AGENTIC_COMMERCE,
         abi: AGENTIC_COMMERCE_ABI,
         functionName: "createJob",
         args: [description, budgetRaw, providerAddress, evaluatorAddress, expiredAt],
-      });
+      }));
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
