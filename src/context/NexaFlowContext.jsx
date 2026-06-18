@@ -8,7 +8,7 @@ import {
   useSwitchChain,
   useSignMessage
 } from 'wagmi';
-import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs } from 'viem';
+import { formatUnits, parseUnits, keccak256, encodeFunctionData, decodeAbiParameters, encodeAbiParameters, parseEventLogs, getAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ethers } from 'ethers';
 
@@ -443,6 +443,271 @@ export const NexaFlowProvider = ({ children }) => {
       setWorkerRulesMap(newRules);
     } catch (e) {
       console.warn("Failed to fetch worker rules", e);
+    }
+  };
+
+  // Map transaction/enclave errors to friendly formats
+  const mapErrorToFriendlyMessage = (error) => {
+    const message = error?.message || error?.toString() || '';
+    if (
+      message.includes('User rejected') || 
+      message.includes('User denied') || 
+      message.includes('Transaction rejected') ||
+      message.includes('Unexpected error') ||
+      message.includes('evmAsk') ||
+      error?.code === 4001
+    ) {
+      return { silent: true };
+    }
+    return {
+      title: 'Action Failed',
+      message: message || 'Something went wrong while processing your request.',
+      type: 'error'
+    };
+  };
+
+  const executeContractCallDirectly = async ({
+    walletType,
+    contractAddress,
+    abi,
+    functionName,
+    args,
+    value
+  }) => {
+    if (walletType === 'smart') {
+      const func = abi.find(item => item.name === functionName && item.type === 'function');
+      if (!func) throw new Error(`Function ${functionName} not found in ABI`);
+      const signature = `${functionName}(${func.inputs.map(i => i.type).join(',')})`;
+
+      const formattedArgs = (args || []).map(arg => {
+        if (typeof arg === 'bigint') return arg.toString();
+        if (Array.isArray(arg)) {
+          return arg.map(val => typeof val === 'bigint' ? val.toString() : val);
+        }
+        return arg;
+      });
+
+      const res = await fetch('http://localhost:3011/api/ucw/contract-execution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: address.toLowerCase(),
+          walletId: passkeyCredentialId,
+          contractAddress,
+          abiFunctionSignature: signature,
+          abiParameters: formattedArgs
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create execution challenge');
+      }
+
+      const { challengeId, userToken, encryptionKey, appId, circleServiceUrl } = data;
+
+      const pinLoadingId = showLoadingModal({
+        title: 'Sign Transaction',
+        description: 'Opening Circle secure enclave. Please enter your PIN to sign this action.'
+      });
+
+      const txPromise = new Promise((resolveTx, rejectTx) => {
+        import('@circle-fin/w3s-pw-web-sdk').then(async ({ W3SSdk }) => {
+          const sdkInstance = new W3SSdk({ appSettings: { appId } });
+          if (circleServiceUrl) {
+            sdkInstance.serviceUrl = circleServiceUrl;
+          }
+          sdkInstance.setAuthentication({ userToken, encryptionKey });
+          await sdkInstance.getDeviceId();
+
+          sdkInstance.execute(challengeId, (error, result) => {
+            closeModal(pinLoadingId);
+            if (error) {
+              rejectTx(error);
+            } else {
+              resolveTx(result?.txHash || result);
+            }
+          });
+        }).catch(rejectTx);
+      });
+
+      const txHash = await txPromise;
+      const miningId = showLoadingModal({
+        title: 'Confirming Transaction',
+        description: 'Awaiting block confirmation on Arc Testnet...'
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      closeModal(miningId);
+      return txHash;
+    } else {
+      const hash = await writeContractAsync({
+        address: contractAddress,
+        abi,
+        functionName,
+        args,
+        value
+      });
+      const miningId = showLoadingModal({
+        title: 'Confirming Transaction',
+        description: 'Awaiting block confirmation...'
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      closeModal(miningId);
+      return hash;
+    }
+  };
+
+  const executeContractCall = async ({
+    contractAddress,
+    abi,
+    functionName,
+    args,
+    value,
+    actionName,
+    successMessage,
+    beforeExecute,
+    onSuccess,
+    onError
+  }) => {
+    const getArgs = (chosenAddr) => {
+      return typeof args === 'function' ? args(chosenAddr) : args;
+    };
+
+    if (passkeyAccountAddress && address) {
+      return new Promise((resolve, reject) => {
+        showModal({
+          type: 'wallet-select',
+          title: 'Choose Execution Wallet',
+          description: `Select which wallet you want to use to execute: ${actionName}`,
+          smartAddress: passkeyAccountAddress,
+          smartBalance: passkeyUsdcBalance,
+          eoaAddress: address,
+          eoaBalance: usdcBalance,
+          onSelectSmart: async () => {
+            try {
+              if (beforeExecute) {
+                await beforeExecute('smart', passkeyAccountAddress);
+              }
+              const finalArgs = getArgs(passkeyAccountAddress);
+              const txHash = await executeContractCallDirectly({
+                walletType: 'smart',
+                contractAddress,
+                abi,
+                functionName,
+                args: finalArgs,
+                value
+              });
+              if (successMessage) {
+                triggerToast('Transaction Success', successMessage);
+              }
+              if (onSuccess) await onSuccess(txHash, 'smart', passkeyAccountAddress);
+              resolve(txHash);
+            } catch (err) {
+              const mapped = mapErrorToFriendlyMessage(err);
+              if (mapped && mapped.silent) {
+                // Ignore silent
+              } else {
+                console.error(err);
+                triggerToast('Transaction Failed', err.message || err.toString());
+              }
+              if (onError) onError(err);
+              reject(err);
+            }
+          },
+          onSelectEoa: async () => {
+            try {
+              if (beforeExecute) {
+                await beforeExecute('eoa', address);
+              }
+              const finalArgs = getArgs(address);
+              const txHash = await executeContractCallDirectly({
+                walletType: 'eoa',
+                contractAddress,
+                abi,
+                functionName,
+                args: finalArgs,
+                value
+              });
+              if (successMessage) {
+                triggerToast('Transaction Success', successMessage);
+              }
+              if (onSuccess) await onSuccess(txHash, 'eoa', address);
+              resolve(txHash);
+            } catch (err) {
+              const mapped = mapErrorToFriendlyMessage(err);
+              if (mapped && mapped.silent) {
+                // Ignore silent
+              } else {
+                console.error(err);
+                triggerToast('Transaction Failed', err.message || err.toString());
+              }
+              if (onError) onError(err);
+              reject(err);
+            }
+          }
+        });
+      });
+    }
+
+    if (passkeyAccountAddress && !address) {
+      try {
+        if (beforeExecute) {
+          await beforeExecute('smart', passkeyAccountAddress);
+        }
+        const finalArgs = getArgs(passkeyAccountAddress);
+        const txHash = await executeContractCallDirectly({
+          walletType: 'smart',
+          contractAddress,
+          abi,
+          functionName,
+          args: finalArgs,
+          value
+        });
+        if (successMessage) {
+          triggerToast('Transaction Success', successMessage);
+        }
+        if (onSuccess) await onSuccess(txHash, 'smart', passkeyAccountAddress);
+        return txHash;
+      } catch (err) {
+        const mapped = mapErrorToFriendlyMessage(err);
+        if (mapped && mapped.silent) {
+          // Ignore silent
+        } else {
+          console.error(err);
+          triggerToast('Transaction Failed', err.message || err.toString());
+        }
+        if (onError) onError(err);
+        throw err;
+      }
+    }
+
+    try {
+      if (beforeExecute) {
+        await beforeExecute('eoa', address);
+      }
+      const finalArgs = getArgs(address || '0x0000000000000000000000000000000000000000');
+      const txHash = await executeContractCallDirectly({
+        walletType: 'eoa',
+        contractAddress,
+        abi,
+        functionName,
+        args: finalArgs,
+        value
+      });
+      if (successMessage) {
+        triggerToast('Transaction Success', successMessage);
+      }
+      if (onSuccess) await onSuccess(txHash, 'eoa', address || '0x0000000000000000000000000000000000000000');
+      return txHash;
+    } catch (err) {
+      const mapped = mapErrorToFriendlyMessage(err);
+      if (mapped && mapped.silent) {
+        // Ignore silent
+      } else {
+        console.error(err);
+        triggerToast('Transaction Failed', err.message || err.toString());
+      }
+      if (onError) onError(err);
+      throw err;
     }
   };
 
@@ -1174,27 +1439,56 @@ export const NexaFlowProvider = ({ children }) => {
     try {
       setIsBridgingInProgress(true);
       setBridgeStep(2);
-      setBridgeStatusText("Switching network to Base Sepolia...");
+      
+      let sourceChainId, sourceUsdcAddress, sourceTokenMessenger, sourceChainName, sourceRpcUrl, sourceExplorerUrl;
+
+      if (bridgeSourceChain === 'Ethereum Sepolia') {
+        sourceChainId = 11155111;
+        sourceUsdcAddress = getAddress('0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'.toLowerCase());
+        sourceTokenMessenger = getAddress('0x9f3d8a9568d407F563b78D85B1F1387d853b0638'.toLowerCase());
+        sourceChainName = 'Ethereum Sepolia';
+        sourceRpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
+        sourceExplorerUrl = 'https://sepolia.etherscan.io';
+      } else if (bridgeSourceChain === 'Arbitrum Sepolia') {
+        sourceChainId = 421614;
+        sourceUsdcAddress = getAddress('0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d'.toLowerCase());
+        sourceTokenMessenger = getAddress('0x9f3d8a9568d407F563b78D85B1F1387d853b0638'.toLowerCase());
+        sourceChainName = 'Arbitrum Sepolia';
+        sourceRpcUrl = 'https://arbitrum-sepolia-rpc.publicnode.com';
+        sourceExplorerUrl = 'https://sepolia.arbiscan.io';
+      } else {
+        // Base Sepolia
+        sourceChainId = 84532;
+        sourceUsdcAddress = getAddress('0x0360000000000000000000000000000000000000'.toLowerCase());
+        sourceTokenMessenger = getAddress('0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275'.toLowerCase());
+        sourceChainName = 'Base Sepolia';
+        sourceRpcUrl = 'https://base-sepolia-rpc.publicnode.com';
+        sourceExplorerUrl = 'https://sepolia.basescan.org';
+      }
+
+      setBridgeStatusText(`Switching network to ${sourceChainName}...`);
+
+      const hexChainId = '0x' + sourceChainId.toString(16);
 
       try {
-        await switchChainAsync({ chainId: 84532 });
+        await switchChainAsync({ chainId: sourceChainId });
       } catch (err) {
         if (window.ethereum) {
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x14a34' }],
+              params: [{ chainId: hexChainId }],
             });
           } catch (switchError) {
             if (switchError.code === 4902) {
               await window.ethereum.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
-                  chainId: '0x14a34',
-                  chainName: 'Base Sepolia',
+                  chainId: hexChainId,
+                  chainName: sourceChainName,
                   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-                  rpcUrls: ['https://sepolia.base.org'],
-                  blockExplorerUrls: ['https://sepolia.basescan.org']
+                  rpcUrls: [sourceRpcUrl],
+                  blockExplorerUrls: [sourceExplorerUrl]
                 }]
               });
             } else {
@@ -1202,27 +1496,25 @@ export const NexaFlowProvider = ({ children }) => {
             }
           }
         } else {
-          throw new Error("Please switch your wallet to Base Sepolia manually");
+          throw new Error(`Please switch your wallet to ${sourceChainName} manually`);
         }
       }
 
-      setBridgeStatusText("Approving USDC spend for CCTP TokenMessenger on Base Sepolia...");
+      setBridgeStatusText(`Approving USDC spend for CCTP TokenMessenger on ${sourceChainName}...`);
 
-      const BASE_USDC = '0x0360000000000000000000000000000000000000';
-      const BASE_TOKEN_MESSENGER = '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275';
       const amountToBridgeRaw = parseUnits(bridgeAmount, 6);
 
       const approveTx = await writeContractAsync({
-        address: BASE_USDC,
+        address: sourceUsdcAddress,
         abi: USDC_ABI,
         functionName: 'approve',
-        args: [BASE_TOKEN_MESSENGER, amountToBridgeRaw]
+        args: [sourceTokenMessenger, amountToBridgeRaw]
       });
 
       setBridgeStatusText(`Allowance transaction submitted: ${approveTx}. Awaiting confirmation...`);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      setBridgeStatusText("Executing depositForBurn on Base Sepolia...");
+      setBridgeStatusText(`Executing depositForBurn on ${sourceChainName}...`);
 
       const tokenMessengerAbi = [
         {
@@ -1242,10 +1534,10 @@ export const NexaFlowProvider = ({ children }) => {
       const recipientBytes32 = '0x' + CROSS_CHAIN_TREASURY_ADDRESS.substring(2).padStart(64, '0');
 
       const burnTx = await writeContractAsync({
-        address: BASE_TOKEN_MESSENGER,
+        address: sourceTokenMessenger,
         abi: tokenMessengerAbi,
         functionName: 'depositForBurn',
-        args: [amountToBridgeRaw, 26, recipientBytes32, BASE_USDC]
+        args: [amountToBridgeRaw, 26, recipientBytes32, sourceUsdcAddress]
       });
 
       setBridgeStatusText(`Burn transaction submitted: ${burnTx}. Awaiting block confirmation...`);
@@ -1281,7 +1573,6 @@ export const NexaFlowProvider = ({ children }) => {
       const messageHash = keccak256(messageBytes);
       setBridgeTxHash(burnTx);
       setBridgeMessageBytes(messageBytes);
-      setBridgeStep(3);
       setBridgeStatusText("Waiting for Circle CCTP attestation signature... This takes ~60 seconds on testnet.");
 
       pollCircleAttestation(messageHash, messageBytes);
@@ -1306,10 +1597,9 @@ export const NexaFlowProvider = ({ children }) => {
           if (data.status === 'complete' && data.attestation) {
             clearInterval(interval);
             setBridgeAttestation(data.attestation);
-            setBridgeStatusText("Circle CCTP Attestation signature retrieved! Prompting network switch back to Arc...");
-            setBridgeStep(4);
-            setIsBridgingInProgress(false);
             triggerToast('Attestation Received', 'Circle CCTP attestation signed successfully.');
+            // Automatically switch network and claim
+            await handleClaimCctpBridge(data.attestation, messageBytes);
           }
         }
       } catch (err) {
@@ -1318,21 +1608,23 @@ export const NexaFlowProvider = ({ children }) => {
 
       if (attempts >= 90) {
         clearInterval(interval);
-        setBridgeStatusText("CCTP attestation polling timed out. You can manually enter/claim or use simulated attestation.");
+        setBridgeStatusText("CCTP attestation polling timed out. You can use simulated attestation (mock skip) to continue.");
         setIsBridgingInProgress(false);
       }
     }, 2000);
   };
 
-  const handleMockAttestation = () => {
+  const handleMockAttestation = async () => {
     const dummySignature = '0x' + Array(130).fill('f').join('');
     setBridgeAttestation(dummySignature);
-    setBridgeStatusText("Simulated Attestation signature generated! Proceed to claim on Arc Testnet.");
-    setBridgeStep(4);
     triggerToast('Simulated Attestation', 'Bypassed testnet delay with mock signature for demo.');
+    // Automatically switch network and claim
+    await handleClaimCctpBridge(dummySignature, bridgeMessageBytes);
   };
 
-  const handleClaimCctpBridge = async () => {
+  const handleClaimCctpBridge = async (customAttestation, customMsgBytes) => {
+    const att = customAttestation || bridgeAttestation;
+    const msg = customMsgBytes || bridgeMessageBytes;
     try {
       setIsBridgingInProgress(true);
       setBridgeStatusText("Switching network back to Arc Testnet...");
@@ -1354,14 +1646,14 @@ export const NexaFlowProvider = ({ children }) => {
         address: CROSS_CHAIN_TREASURY_ADDRESS,
         abi: CROSS_CHAIN_TREASURY_ABI,
         functionName: 'claimUSDCFromBridge',
-        args: [bridgeMessageBytes, bridgeAttestation]
+        args: [msg, att]
       });
 
       setBridgeStatusText(`Claim transaction submitted: ${claimTx}. Confirming deposit...`);
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       setBridgeStatusText("Deposit successfully processed! Pre-funded payroll balance credited.");
-      setBridgeStep(5);
+      setBridgeStep(3); // Complete is now Step 3
       setIsBridgingInProgress(false);
       triggerToast('Deposit Credited', `Successfully bridged ${bridgeAmount} USDC to Arc Payroll contract!`);
       
@@ -1697,27 +1989,27 @@ export const NexaFlowProvider = ({ children }) => {
     }
     setApproveLoading(true);
     try {
-      const hash = await writeContractAsync({
-        address: USDC_TOKEN_ADDRESS,
+      await executeContractCall({
+        contractAddress: USDC_TOKEN_ADDRESS,
         abi: USDC_ABI,
         functionName: 'approve',
-        args: [MICRO_BENEFITS_VAULT_ADDRESS, parseUnits('1000000', 6)]
+        args: [MICRO_BENEFITS_VAULT_ADDRESS, parseUnits('1000000', 6)],
+        actionName: 'Approve Benefits Vault',
+        successMessage: 'Vault is now authorized to receive splits.',
+        onSuccess: async () => {
+          refetchBenefitsAllowance();
+        }
       });
-      triggerToast('Approve Tx Broadcasted', 'Approving benefits vault contract to transfer USDC...');
-      await publicClient.waitForTransactionReceipt({ hash });
-      refetchBenefitsAllowance();
-      setApproveLoading(false);
-      triggerToast('Allowance Approved', 'Vault is now authorized to receive splits.');
     } catch (e) {
       console.error(e);
+    } finally {
       setApproveLoading(false);
-      triggerToast('Approval Failed', e.message);
     }
   };
 
   // DEPOSIT SPLITS INTO INDIVIDUAL POOLS
   const handleDepositSplits = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!isConnected) {
       triggerToast('Wallet not connected', 'Please connect your wallet.');
       return;
@@ -1727,7 +2019,7 @@ export const NexaFlowProvider = ({ children }) => {
       return;
     }
     const val = parseFloat(depositAmount);
-    if (val > usdcBalance) {
+    if (val > usdcBalance && !passkeyAccountAddress) {
       triggerToast('Insufficient Balance', 'You do not have enough USDC in your wallet.');
       return;
     }
@@ -1741,24 +2033,24 @@ export const NexaFlowProvider = ({ children }) => {
       const retirementRaw = parseUnits(retirementAmount.toFixed(6), 6);
       const emergencyRaw = parseUnits(emergencyAmount.toFixed(6), 6);
 
-      const hash = await writeContractAsync({
-        address: MICRO_BENEFITS_VAULT_ADDRESS,
+      await executeContractCall({
+        contractAddress: MICRO_BENEFITS_VAULT_ADDRESS,
         abi: MICRO_BENEFITS_VAULT_ABI,
         functionName: 'depositContribution',
-        args: [address, healthRaw, retirementRaw, emergencyRaw]
+        args: (chosenAddr) => [chosenAddr, healthRaw, retirementRaw, emergencyRaw],
+        actionName: 'Deposit Splits',
+        successMessage: `Deposited and split ${val} USDC on-chain!`,
+        onSuccess: async () => {
+          refetchUsdc();
+          refetchMemberAccount();
+          refetchCoopTreasury();
+          setDepositAmount('');
+        }
       });
-      triggerToast('Deposit Broadcasted', 'Slicing splits and sending to vault contracts on-chain...');
-      await publicClient.waitForTransactionReceipt({ hash });
-      
-      refetchUsdc();
-      refetchMemberAccount();
-      refetchCoopTreasury();
-      setDepositLoading(false);
-      triggerToast('Deposit Successful', `Deposited and split ${val} USDC on-chain!`);
     } catch (err) {
       console.error(err);
+    } finally {
       setDepositLoading(false);
-      triggerToast('Deposit Failed', err.message);
     }
   };
 
@@ -1831,7 +2123,7 @@ export const NexaFlowProvider = ({ children }) => {
         setApproveLoading(false);
       }
     } else {
-      // Manual MetaMask creation
+      // Manual creation with wallet choice
       if (!isConnected) {
         triggerToast('Wallet not connected', 'Please connect your Web3 wallet.');
         return;
@@ -1841,66 +2133,72 @@ export const NexaFlowProvider = ({ children }) => {
         const selectedRate = pegToFiat ? (fiatMonthlySalary / 2592000) : Number(newEmployeeRate);
         const flowRateRaw = parseUnits(selectedRate.toFixed(6), 6);
         const totalCapRaw = parseUnits(newEmployeeCap.toString(), 6);
+        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+        await executeContractCall({
+          contractAddress: STREAMING_PAYROLL_ADDRESS,
+          abi: STREAMING_PAYROLL_ABI,
+          functionName: isPrivateMode ? 'createPrivateStream' : 'createStream',
+          args: (chosenAddr) => {
+            const streamId = keccak256(
+              encodeAbiParameters(
+                [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }],
+                [chosenAddr, newEmployeeAddress, timestamp]
+              )
+            );
+            return [streamId, newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)];
+          },
+          actionName: 'Create salary stream',
+          successMessage: 'Salary streaming successfully established.',
+          beforeExecute: async (walletType, activeAddr) => {
+            const currentAllowanceRaw = await publicClient.readContract({
+              address: USDC_TOKEN_ADDRESS,
+              abi: USDC_ABI,
+              functionName: 'allowance',
+              args: [activeAddr, STREAMING_PAYROLL_ADDRESS]
+            });
+            const currentAllowance = Number(formatUnits(currentAllowanceRaw, 6));
+            if (currentAllowance < Number(newEmployeeCap)) {
+              triggerToast('Approving USDC', 'Requesting allowance approval for streaming payroll contract...');
+              await executeContractCallDirectly({
+                walletType,
+                contractAddress: USDC_TOKEN_ADDRESS,
+                abi: USDC_ABI,
+                functionName: 'approve',
+                args: [STREAMING_PAYROLL_ADDRESS, totalCapRaw]
+              });
+              refetchAllowance();
+            }
+          },
+          onSuccess: async (txHash, walletType, activeAddr) => {
+            const streamId = keccak256(
+              encodeAbiParameters(
+                [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }],
+                [activeAddr, newEmployeeAddress, timestamp]
+              )
+            );
 
-        if (allowance < Number(newEmployeeCap)) {
-          triggerToast('Approving USDC', 'Requesting allowance approval for streaming payroll contract...');
-          const approveHash = await writeContractAsync({
-            address: USDC_TOKEN_ADDRESS,
-            abi: USDC_ABI,
-            functionName: 'approve',
-            args: [STREAMING_PAYROLL_ADDRESS, totalCapRaw]
-          });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
-          refetchAllowance();
-        }
+            if (isPrivateMode) {
+              const privateSecrets = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}');
+              privateSecrets[streamId] = {
+                name: newEmployeeName || 'Confidential Agent',
+                role: newEmployeeRole || 'Classified Specialist',
+                location: newEmployeeLoc,
+                flowRate: selectedRate
+              };
+              localStorage.setItem('nexaflow_private_stream_secrets', JSON.stringify(privateSecrets));
+            }
 
-        triggerToast('Broadcasting Stream', 'Submitting createStream to the blockchain...');
-        const streamId = keccak256(
-          encodeAbiParameters(
-            [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }],
-            [address, newEmployeeAddress, BigInt(Math.floor(Date.now() / 1000))]
-          )
-        );
-
-        let hash;
-        if (isPrivateMode) {
-          hash = await writeContractAsync({
-            address: STREAMING_PAYROLL_ADDRESS,
-            abi: STREAMING_PAYROLL_ABI,
-            functionName: 'createPrivateStream',
-            args: [streamId, newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)]
-          });
-        } else {
-          hash = await writeContractAsync({
-            address: STREAMING_PAYROLL_ADDRESS,
-            abi: STREAMING_PAYROLL_ABI,
-            functionName: 'createStream',
-            args: [streamId, newEmployeeAddress, flowRateRaw, totalCapRaw, getCountryCode(newEmployeeLoc)]
-          });
-        }
-
-        triggerToast('Awaiting Settlement', 'Waiting for on-chain transaction block to confirm...');
-        await publicClient.waitForTransactionReceipt({ hash });
-
-        if (isPrivateMode) {
-          const privateSecrets = JSON.parse(localStorage.getItem('nexaflow_private_stream_secrets') || '{}');
-          privateSecrets[streamId] = {
-            name: newEmployeeName || 'Confidential Agent',
-            role: newEmployeeRole || 'Classified Specialist',
-            location: newEmployeeLoc,
-            flowRate: selectedRate
-          };
-          localStorage.setItem('nexaflow_private_stream_secrets', JSON.stringify(privateSecrets));
-        }
-
-        triggerToast('Stream Active', `Salary streaming successfully established.`, 'success');
-        setStreamIds((prev) => [...prev, streamId]);
-        
-        setNewEmployeeName('');
-        setNewEmployeeAddress('');
+            setStreamIds((prev) => [...prev, streamId]);
+            setNewEmployeeName('');
+            setNewEmployeeAddress('');
+            refetchUsdc();
+            if (walletType === 'smart') {
+              refetchPasskeyUsdc && refetchPasskeyUsdc();
+            }
+          }
+        });
       } catch (err) {
         console.error(err);
-        triggerToast('Create Stream Failed', err.message);
       } finally {
         setApproveLoading(false);
       }
@@ -2082,23 +2380,22 @@ export const NexaFlowProvider = ({ children }) => {
       return;
     }
     setIsProposing(true);
-    triggerToast('Proposing Withdrawal', `Creating proposal to withdraw ${withdrawLeftoverAmount} USDC leftover...`);
     try {
       const rawAmount = parseUnits(withdrawLeftoverAmount.toString(), 6);
-      const hash = await writeContractAsync({
-        address: STREAMING_PAYROLL_ADDRESS,
+      await executeContractCall({
+        contractAddress: STREAMING_PAYROLL_ADDRESS,
         abi: STREAMING_PAYROLL_ABI,
         functionName: 'proposeWithdrawLeftover',
-        args: [rawAmount]
+        args: [rawAmount],
+        actionName: 'Propose Leftover Withdrawal',
+        successMessage: 'Withdrawal proposal created successfully.',
+        onSuccess: async () => {
+          setWithdrawLeftoverAmount('');
+          await fetchProposals();
+        }
       });
-      triggerToast('Transaction Submitted', 'Creating proposal...');
-      await publicClient.waitForTransactionReceipt({ hash });
-      triggerToast('Proposal Created', `Withdrawal proposal created successfully.`, 'success');
-      setWithdrawLeftoverAmount('');
-      await fetchProposals();
     } catch (err) {
       console.error(err);
-      triggerToast('Proposal Failed', err.message);
     } finally {
       setIsProposing(false);
     }
@@ -2111,24 +2408,73 @@ export const NexaFlowProvider = ({ children }) => {
       return;
     }
     setIsProposing(true);
-    triggerToast('Proposing Oracle Change', `Creating proposal to update payroll oracle...`);
     try {
-      const hash = await writeContractAsync({
-        address: STREAMING_PAYROLL_ADDRESS,
+      await executeContractCall({
+        contractAddress: STREAMING_PAYROLL_ADDRESS,
         abi: STREAMING_PAYROLL_ABI,
         functionName: 'proposeSetPayrollOracle',
-        args: [newOracleAddress]
+        args: [newOracleAddress],
+        actionName: 'Propose Oracle Update',
+        successMessage: 'Oracle change proposal created successfully.',
+        onSuccess: async () => {
+          setNewOracleAddress('');
+          await fetchProposals();
+        }
       });
-      triggerToast('Transaction Submitted', 'Creating proposal...');
-      await publicClient.waitForTransactionReceipt({ hash });
-      triggerToast('Proposal Created', `Oracle change proposal created successfully.`, 'success');
-      setNewOracleAddress('');
-      await fetchProposals();
     } catch (err) {
       console.error(err);
-      triggerToast('Proposal Failed', err.message);
     } finally {
       setIsProposing(false);
+    }
+  };
+
+  // CONFIRM MULTI-SIG PROPOSAL
+  const handleConfirmProposal = async (proposalId) => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet first.');
+      return;
+    }
+    try {
+      await executeContractCall({
+        contractAddress: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'confirmProposal',
+        args: [BigInt(proposalId)],
+        actionName: 'Approve Proposal',
+        successMessage: `Successfully confirmed governance proposal #${proposalId}.`,
+        onSuccess: async () => {
+          await fetchProposals();
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // EXECUTE MULTI-SIG PROPOSAL
+  const handleExecuteProposal = async (proposalId) => {
+    if (!isConnected) {
+      triggerToast('Wallet not connected', 'Please connect your Web3 wallet first.');
+      return;
+    }
+    try {
+      await executeContractCall({
+        contractAddress: STREAMING_PAYROLL_ADDRESS,
+        abi: STREAMING_PAYROLL_ABI,
+        functionName: 'executeProposal',
+        args: [BigInt(proposalId)],
+        actionName: 'Execute Proposal',
+        successMessage: `Successfully executed governance proposal #${proposalId}!`,
+        onSuccess: async () => {
+          await fetchProposals();
+          refetchUsdc();
+          refetchEmployerBuffer();
+          refetchDaysCovered();
+          refetchWarningState();
+        }
+      });
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -2799,6 +3145,7 @@ export const NexaFlowProvider = ({ children }) => {
       bridgeAttestation,
       bridgeStatusText,
       isBridgingInProgress,
+      setIsBridgingInProgress,
       
       // Safety/Splits & Claims
       benefitsConfig,
@@ -2880,6 +3227,8 @@ export const NexaFlowProvider = ({ children }) => {
       handleProposeRegistry,
       handleSubmitClaim,
       runSecurityScan,
+      handleConfirmProposal,
+      handleExecuteProposal,
       
       // Missing streams actions
       downloadCsvTemplate,
