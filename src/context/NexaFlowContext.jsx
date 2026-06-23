@@ -286,8 +286,28 @@ export const NexaFlowProvider = ({ children }) => {
       engineer: 'NexaFlow Platform',
       amount: 'Contract Deployment',
       txHash: '0x3cef...492a',
-      time: 'Just now',
+      time: '2 hours ago',
       gas: '0.0450 USDC (Arc Gas)',
+      status: 'Finalized'
+    },
+    {
+      id: 2,
+      type: 'Cross-Chain CCTP Deposit',
+      engineer: 'Corporate Treasury',
+      amount: '+1,500.00 USDC',
+      txHash: '0x8f4d...31ba',
+      time: '1 hour ago',
+      gas: 'Sponsored (Free)',
+      status: 'Finalized'
+    },
+    {
+      id: 3,
+      type: 'Stream Initiated',
+      engineer: 'Tan Wei Liang',
+      amount: '1,500.00 USDC Max Cap',
+      txHash: '0x5c7a...2f1e',
+      time: '45 mins ago',
+      gas: 'Sponsored (Free)',
       status: 'Finalized'
     }
   ]);

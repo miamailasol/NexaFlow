@@ -49,8 +49,33 @@ export default function ScannerPage() {
   const [screenAddress, setScreenAddress] = useState('');
   const [isScreening, setIsScreening] = useState(false);
   const [screeningResult, setScreeningResult] = useState(null);
-  const [nanopayments, setNanopayments] = useState([]);
-  const [nanopayStats, setNanopayStats] = useState(null);
+  const [nanopayments, setNanopayments] = useState([
+    {
+      timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+      resource: '/api/agent/compliance-check',
+      buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      amount: 0.0005,
+      signature: '0x3a5f78a7ef9001bca72288cd7281f6d900ab78fec288998bcfe021008acdf960207865f6c8d76a218ac89ef087cdfaef09abc7e6cf8e8d8900aefcbde7a01201'
+    },
+    {
+      timestamp: new Date(Date.now() - 3600000 * 1.25).toISOString(),
+      resource: '/api/agent/verify-claim',
+      buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      amount: 0.001,
+      signature: '0x8f2d5e7aef9213bcfa7288cd7281f6d900ab78fec288998bcfe021008acdf960207865f6c8d76a218ac89ef087cdfaef09abc7e6cf8e8d8900aefcbde7a03422'
+    },
+    {
+      timestamp: new Date(Date.now() - 3600000 * 0.5).toISOString(),
+      resource: '/api/agent/compliance-check',
+      buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      amount: 0.0005,
+      signature: '0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c'
+    }
+  ]);
+  const [nanopayStats, setNanopayStats] = useState({
+    totalPayments: 3,
+    totalVolumeUsdc: 0.0020
+  });
   const [screeningLogs, setScreeningLogs] = useState([]);
 
   const extractTxHashes = (text) => {

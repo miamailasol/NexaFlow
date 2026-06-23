@@ -519,18 +519,46 @@ export async function depositX402(buyerAddress, amountUsdc) {
 }
 
 // ─── Initial Database Seeding ─────────────────────────────────────────
+const defaultAgentLogs = [
+  { agent: "System", action: "BOOTSTRAP", details: "NexaFlow Multi-Agent Coordination system initialized.", timestamp: new Date(Date.now() - 3600000 * 4).toISOString() },
+  { agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Verification Agent (ID: 3)", timestamp: new Date(Date.now() - 3600000 * 3.8).toISOString() },
+  { agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Compliance Agent (ID: 4)", timestamp: new Date(Date.now() - 3600000 * 3.7).toISOString() },
+  { agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Settlement Agent (ID: 5)", timestamp: new Date(Date.now() - 3600000 * 3.6).toISOString() },
+  { agent: "Compliance", action: "SCREENING", details: "Sanctions & OFAC compliance check triggered for employer 0x70997970C51812dc3A010C7d01b50e0d17dc79C8", timestamp: new Date(Date.now() - 3600000 * 3.2).toISOString() },
+  { agent: "Compliance", action: "SCREENED", details: "Address cleared. Risk Score: 0/100. Recommendation: APPROVED", timestamp: new Date(Date.now() - 3600000 * 3.1).toISOString() },
+  { agent: "Payroll", action: "BUDGET_CHECK", details: "Checking stream funding authorization limits. Current allowance: 1,000,000 USDC", timestamp: new Date(Date.now() - 3600000 * 2.8).toISOString() },
+  { agent: "Payroll", action: "STREAM_CREATED", details: "Continuous pay stream configured for Alice Smith (0x9e71a3371987d6f26d8251e18a8fdcb59296556e). Flow: 0.005 USDC/s", timestamp: new Date(Date.now() - 3600000 * 2.5).toISOString() },
+  { agent: "System", action: "CLAIM_RECEIVED", details: "Benefits claim of $200.00 USDC submitted by demo employee 0x70997970C51812dc3A010C7d01b50e0d17dc79C8", timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString() },
+  { agent: "Coordinator", action: "ROUTING", details: "Routing medical benefits claim verification request to Verification Agent", timestamp: new Date(Date.now() - 3600000 * 1.48).toISOString() },
+  { agent: "Compliance", action: "SCREENING", details: "Running sanction checklist check on claimant 0x70997970C51812dc3A010C7d01b50e0d17dc79C8", timestamp: new Date(Date.now() - 3600000 * 1.45).toISOString() },
+  { agent: "Compliance", action: "SCREENED", details: "Claimant cleared. Recommendation: APPROVED", timestamp: new Date(Date.now() - 3600000 * 1.44).toISOString() },
+  { agent: "Verification", action: "ANALYZING", details: "DeepSeek v4 parsing invoice text. Clinic provider validation: PASS. Sum check: PASS.", timestamp: new Date(Date.now() - 3600000 * 1.4).toISOString() },
+  { agent: "Verification", action: "COMPLETED", details: "Claim verified as LEGITIMATE with confidence score: 0.98. Signature hash created.", timestamp: new Date(Date.now() - 3600000 * 1.35).toISOString() },
+  { agent: "Settlement", action: "SETTLING", details: "Initiating USDC refund disbursement of $200.00 USDC via Circle Developer Wallet", timestamp: new Date(Date.now() - 3600000 * 1.3).toISOString() },
+  { agent: "Settlement", action: "SETTLED", details: "Disbursement completed on-chain. Tx: 0x9beff4270d4bde28cd525089e45831938b8c01ac5c02574B56B0b4F9F1b76960", timestamp: new Date(Date.now() - 3600000 * 1.25).toISOString() },
+  { agent: "Coordinator", action: "RECORDING", details: "Updating Verification Agent reputation scores (+10 points for successful claim settlement)", timestamp: new Date(Date.now() - 3600000 * 1.2).toISOString() },
+  { agent: "Coordinator", action: "COMPLETED", details: "Benefits claim process completed successfully", timestamp: new Date(Date.now() - 3600000 * 1.15).toISOString() }
+];
+
+const defaultX402Ledger = [
+  { payment_id: "p-init-1", sender: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", recipient: "0xCA2DE969C3266f530a27bE3B46EC0550cF609c67", amount: 0.001, nonce: "payment-1", signature: "0x123...456", timestamp: new Date(Date.now() - 3600000 * 1.4).toISOString() },
+  { payment_id: "p-init-2", sender: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", recipient: "0xCA2DE969C3266f530a27bE3B46EC0550cF609c67", amount: 0.0005, nonce: "payment-2", signature: "0x789...101", timestamp: new Date(Date.now() - 3600000 * 1.45).toISOString() },
+  { payment_id: "p-init-3", sender: "0x0000000000000000000000000000000000000000", recipient: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", amount: 10.0, nonce: "deposit-1", signature: "0xabc...def", timestamp: new Date(Date.now() - 3600000 * 2).toISOString() }
+];
+
 async function seedDBIfEmpty() {
   try {
-    const { count, error } = await supabase
+    // 1. Suggestions Seeding
+    const { count: sugCount, error: sugErr } = await supabase
       .from("suggestions")
       .select("*", { count: "exact", head: true });
 
-    if (error) {
-      console.log("Supabase connection check:", error.message);
+    if (sugErr) {
+      console.log("Supabase connection check failed:", sugErr.message);
       return;
     }
 
-    if (count === 0) {
+    if (sugCount === 0) {
       console.log("🌱 Database suggestions table is empty. Seeding defaults...");
       for (const s of defaultSuggestions) {
         await addSuggestion(s);
@@ -547,10 +575,86 @@ async function seedDBIfEmpty() {
           }
         }
       }
-      console.log("✅ Seeding completed successfully!");
+      console.log("✅ Suggestions seeding completed successfully!");
     } else {
-      console.log("✅ Database connection verified. Found suggestions:", count);
+      console.log("✅ Suggestions table verified. Found:", sugCount);
     }
+
+    // 2. Agent Logs Seeding
+    const { count: logCount, error: logErr } = await supabase
+      .from("agent_logs")
+      .select("*", { count: "exact", head: true });
+
+    if (!logErr && logCount === 0) {
+      console.log("🌱 Database agent_logs table is empty. Seeding defaults...");
+      const { error: insertErr } = await supabase.from("agent_logs").insert(
+        defaultAgentLogs.map(l => ({
+          agent: l.agent,
+          action: l.action,
+          details: l.details,
+          timestamp: l.timestamp
+        }))
+      );
+      if (insertErr) {
+        console.error("Error seeding agent_logs:", insertErr.message);
+      } else {
+        console.log("✅ Agent logs seeding completed successfully!");
+      }
+    } else if (!logErr) {
+      console.log("✅ Agent logs table verified. Found:", logCount);
+    }
+
+    // 3. x402 Ledger Seeding
+    const { count: ledCount, error: ledErr } = await supabase
+      .from("x402_ledger")
+      .select("*", { count: "exact", head: true });
+
+    if (!ledErr && ledCount === 0) {
+      console.log("🌱 Database x402_ledger table is empty. Seeding defaults...");
+      const { error: insertErr } = await supabase.from("x402_ledger").insert(
+        defaultX402Ledger.map(l => ({
+          payment_id: l.payment_id,
+          sender: l.sender,
+          recipient: l.recipient,
+          amount: l.amount,
+          nonce: l.nonce,
+          signature: l.signature,
+          timestamp: l.timestamp
+        }))
+      );
+      if (insertErr) {
+        console.error("Error seeding x402_ledger:", insertErr.message);
+      } else {
+        console.log("✅ x402 ledger seeding completed successfully!");
+      }
+    } else if (!ledErr) {
+      console.log("✅ x402 ledger table verified. Found:", ledCount);
+    }
+
+    // 4. x402 Balances Seeding
+    const defaultDemoAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8".toLowerCase();
+    const { count: balCount, error: balErr } = await supabase
+      .from("x402_balances")
+      .select("*", { count: "exact", head: true });
+
+    if (!balErr && balCount === 0) {
+      console.log("🌱 Database x402_balances table is empty. Seeding defaults...");
+      const { error: insertErr } = await supabase.from("x402_balances").insert([
+        {
+          address: defaultDemoAddress,
+          balance: 10.0,
+          updated_at: new Date().toISOString()
+        }
+      ]);
+      if (insertErr) {
+        console.error("Error seeding x402_balances:", insertErr.message);
+      } else {
+        console.log("✅ x402 balances seeding completed successfully!");
+      }
+    } else if (!balErr) {
+      console.log("✅ x402 balances table verified. Found:", balCount);
+    }
+
   } catch (err) {
     console.error("Failed to seed database:", err);
   }

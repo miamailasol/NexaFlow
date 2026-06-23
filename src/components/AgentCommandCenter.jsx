@@ -43,10 +43,34 @@ const AGENT_CONFIG = {
 
 function AgentCommandCenter() {
   const [serverStatus, setServerStatus] = useState(null);
-  const [activityLog, setActivityLog] = useState([]);
-  const [nanopaymentStats, setNanopaymentStats] = useState(null);
-  const [nanopaymentLedger, setNanopaymentLedger] = useState([]);
-  const [budgets, setBudgets] = useState({});
+  const [activityLog, setActivityLog] = useState([
+    { id: 1, agent: "System", action: "BOOTSTRAP", details: "NexaFlow Multi-Agent Coordination system initialized.", timestamp: new Date(Date.now() - 3600000 * 4).toISOString() },
+    { id: 2, agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Verification Agent (ID: 3)", timestamp: new Date(Date.now() - 3600000 * 3.8).toISOString() },
+    { id: 3, agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Compliance Agent (ID: 4)", timestamp: new Date(Date.now() - 3600000 * 3.7).toISOString() },
+    { id: 4, agent: "Coordinator", action: "REGISTER_AGENT", details: "ERC-8004 identity card generated for Settlement Agent (ID: 5)", timestamp: new Date(Date.now() - 3600000 * 3.6).toISOString() },
+    { id: 5, agent: "Compliance", action: "SCREENING", details: "Sanctions & OFAC compliance check triggered for employer 0x70997970C51812dc3A010C7d01b50e0d17dc79C8", timestamp: new Date(Date.now() - 3600000 * 3.2).toISOString() },
+    { id: 6, agent: "Compliance", action: "SCREENED", details: "Address cleared. Risk Score: 0/100. Recommendation: APPROVED", timestamp: new Date(Date.now() - 3600000 * 3.1).toISOString() },
+    { id: 7, agent: "Payroll", action: "BUDGET_CHECK", details: "Checking stream funding authorization limits. Current allowance: 1,000,000 USDC", timestamp: new Date(Date.now() - 3600000 * 2.8).toISOString() },
+    { id: 8, agent: "Payroll", action: "STREAM_CREATED", details: "Continuous pay stream configured for Alice Smith (0x9e71a3371987d6f26d8251e18a8fdcb59296556e). Flow: 0.005 USDC/s", timestamp: new Date(Date.now() - 3600000 * 2.5).toISOString() }
+  ]);
+  const [nanopaymentStats, setNanopaymentStats] = useState({
+    totalPayments: 18,
+    totalVolumeUsdc: 0.124500,
+    uniqueBuyers: 3,
+    averagePaymentUsdc: 0.006916,
+  });
+  const [nanopaymentLedger, setNanopaymentLedger] = useState([
+    { type: 'DEPOSIT', buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', amount: 10.0, timestamp: new Date(Date.now() - 3600000 * 2).toISOString() },
+    { type: 'PAYMENT', buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', amount: 0.001, timestamp: new Date(Date.now() - 3600000 * 1.4).toISOString() },
+    { type: 'PAYMENT', buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', amount: 0.0005, timestamp: new Date(Date.now() - 3600000 * 1.45).toISOString() },
+  ]);
+  const [budgets, setBudgets] = useState({
+    coordinator: { total: 100, spent: 10, transactions: [] },
+    payroll: { total: 50000, spent: 1250, transactions: [] },
+    verification: { total: 500, spent: 45, transactions: [] },
+    compliance: { total: 200, spent: 15, transactions: [] },
+    settlement: { total: 100000, spent: 4500, transactions: [] },
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [demoResult, setDemoResult] = useState(null);
   const [isDemoRunning, setIsDemoRunning] = useState(false);
