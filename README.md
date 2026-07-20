@@ -17,10 +17,10 @@ By uniting real-time streaming liquidity with automated, AI-agent verified micro
 ---
 
 ### **🔗 Submission Hub**
-* **Live Web App**: [https://nexaflow.vercel.app](https://nexaflow.vercel.app) *(Deploy Placeholder)*
+* **Live Web App**: [https://www.nexaflow.surf/](https://www.nexaflow.surf/)
 * **Interactive Pitch Deck**: [NexaFlow Pitch Slides](docs/pitch-deck.pdf) *(Local Document)*
-* **4-Minute Demo Video**: [Watch NexaFlow in Action](https://youtube.com/watch?v=demo-placeholder) *(Video Link)*
-* **Contract Explorer**: [ArcScan Blockchain Explorer](https://testnet.arcscan.app/address/0xDb671f29A8A95099F2546C6862680134737Fe178)
+* **4-Minute Demo Video**: [Watch NexaFlow in Action](https://drive.google.com/file/d/1nGidlMxBIFFfGC3GwKxKWMAXD7M8HH2T/view?usp=sharing) *(Video Link)*
+* **Contract Explorer**: [ArcScan Blockchain Explorer](https://testnet.arcscan.app/address/0xE366FC3cd96AFbDE41B0Fd8a3096178FaC2d1cDF)
 
 ---
 
@@ -216,11 +216,11 @@ Our contracts are deployed on the **Arc Testnet**:
 
 | Contract Name | Address | Purpose / Key Responsibilities |
 | :--- | :--- | :--- |
-| **StreamingPayroll** | `0xDb671f29A8A95099F2546C6862680134737Fe178` | Manages per-second salary streaming and locked employer escrows. |
-| **MicroBenefitsVault** | `0x14624dCDf725B10A04763Dd503DC6f26Da295771` | Manages HSA balances, retirement/emergency splits, and the Co-op pool. |
+| **StreamingPayroll** | `0xE366FC3cd96AFbDE41B0Fd8a3096178FaC2d1cDF` | Manages per-second salary streaming and locked employer escrows. |
+| **MicroBenefitsVault** | `0x712F4a25c5c02574B56B0b4F9F1b76960a9Ea5E6` | Manages HSA balances, retirement/emergency splits, and the Co-op pool. |
 | **TreasuryBufferManager** | `0x304c6282246229eAD2df763Be789FdA076BD799d` | Monitors employer solvency, calculates days of coverage, and runs warnings. |
 | **PaymasterRulesManager**| `0x5057Ed983efEa1904B55aF36c37557584184F125` | Defines paymaster criteria, allowing gasless claims for registered workers. |
-| **ComplianceRegistry** | `0x2b8916bd1Ba674097444C280aB78Debb866D46E3` | Maintains global sanction states and enables quick compliance updates. |
+| **ComplianceRegistry** | `0x2Be357876a3D286C3a0d183861270a48bF2d377b` | Maintains global sanction states and enables quick compliance updates. |
 
 ---
 
