@@ -18,8 +18,6 @@ By uniting real-time streaming liquidity with automated, AI-agent verified micro
 
 ### **🔗 Submission Hub**
 * **Live Web App**: [https://www.nexaflow.surf/](https://www.nexaflow.surf/)
-* **Interactive Pitch Deck**: [NexaFlow Pitch Slides](docs/pitch-deck.pdf) *(Local Document)*
-* **4-Minute Demo Video**: [Watch NexaFlow in Action](https://drive.google.com/file/d/1nGidlMxBIFFfGC3GwKxKWMAXD7M8HH2T/view?usp=sharing) *(Video Link)*
 * **Contract Explorer**: [ArcScan Blockchain Explorer](https://testnet.arcscan.app/address/0xE366FC3cd96AFbDE41B0Fd8a3096178FaC2d1cDF)
 
 ---
